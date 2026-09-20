@@ -1,0 +1,9 @@
+# OKX submission snapshot: Foundry profile intentionally incomplete.
+# Full compile/deploy config is not provided in this review package.
+
+[profile.default]
+src = "src"
+out = "out"
+libs = ["lib"]
+# remappings and RPC endpoints omitted on purpose
+solc_version = "0.8.28"
