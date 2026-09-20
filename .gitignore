@@ -1,0 +1,15 @@
+node_modules/
+.turbo/
+dist/
+out/
+cache/
+broadcast/
+.next/
+coverage/
+.env
+.env.*
+!.env.example
+*.pem
+*.log
+.DS_Store
+lib/
