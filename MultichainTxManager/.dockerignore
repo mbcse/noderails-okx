@@ -1,0 +1,34 @@
+# ── Build artifacts & deps ──
+node_modules
+dist
+.turbo
+
+# ── Environment ──
+.env
+.env.*
+!.env.example
+
+# ── Git ──
+.git
+.gitignore
+
+# ── Frontend (not needed in backend image) ──
+apps/frontend
+
+# ── IDE / OS ──
+.vscode
+.idea
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ── Docker ──
+Dockerfile
+docker-compose*.yml
+Caddyfile
+.dockerignore
+
+# ── Docs / misc ──
+*.md
+LICENSE

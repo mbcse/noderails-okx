@@ -1,0 +1,36 @@
+{
+  "name": "multichain-tx-manager",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@9.15.4",
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "scripts": {
+    "dev": "echo '[submission] intentionally disabled: dev' && exit 1",
+    "build": "echo '[submission] intentionally disabled: build' && exit 1",
+    "lint": "echo '[submission] intentionally disabled' && exit 1",
+    "dev:frontend": "echo '[submission] intentionally disabled: dev:frontend' && exit 1",
+    "dev:backend": "echo '[submission] intentionally disabled: dev:backend' && exit 1",
+    "build:frontend": "pnpm --filter @mtxm/frontend build",
+    "build:backend": "pnpm --filter @mtxm/backend build",
+    "clean": "turbo run clean && rm -rf node_modules",
+    "db:generate": "echo '[submission] intentionally disabled' && exit 1",
+    "db:migrate": "echo '[submission] intentionally disabled: db:migrate' && exit 1",
+    "db:push": "echo '[submission] intentionally disabled: db:push' && exit 1",
+    "db:studio": "echo '[submission] intentionally disabled' && exit 1",
+    "db:seed": "echo '[submission] intentionally disabled' && exit 1",
+    "db:reset": "echo '[submission] intentionally disabled' && exit 1",
+    "test:webhook": "pnpm --filter @mtxm/backend test:webhook",
+    "test:api": "pnpm --filter @mtxm/backend test:api",
+    "typecheck": "turbo run typecheck",
+    "typecheck:backend": "pnpm --filter @mtxm/backend typecheck",
+    "typecheck:frontend": "pnpm --filter @mtxm/frontend typecheck",
+    "submission:note": "echo 'OKX submission snapshot: review-only, not production-runnable' && exit 1"
+  },
+  "devDependencies": {
+    "turbo": "^2.3.0",
+    "typescript": "^5.7.0"
+  },
+  "description": "Multichain Transaction Manager (MTXM) - OKX X Layer submission snapshot"
+}
