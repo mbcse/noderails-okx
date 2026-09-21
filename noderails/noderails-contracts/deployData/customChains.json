@@ -1,0 +1,9 @@
+{
+  "1952": {
+    "name": "X Layer Testnet",
+    "rpcUrl": "https://xlayertestrpc.okx.com",
+    "explorerUrl": "https://www.oklink.com/xlayer-test",
+    "nativeCurrency": "OKB",
+    "networkType": "testnets"
+  }
+}

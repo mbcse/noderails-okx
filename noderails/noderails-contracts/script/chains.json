@@ -1,0 +1,80 @@
+{
+  "testnets": {
+    "sepolia": {
+      "chainId": 11155111,
+      "rpcUrl": "https://rpc.leanrpc.xyz/rpc?chainId=11155111&apiKey=ak_8166c2e4adfb1fc508ee8d1680f507c4",
+      "explorerUrl": "https://sepolia.etherscan.io",
+      "nativeCurrency": "ETH"
+    },
+    "arbitrum_sepolia": {
+      "chainId": 421614,
+      "rpcUrl": "https://rpc.leanrpc.xyz/rpc?chainId=421614&apiKey=ak_8166c2e4adfb1fc508ee8d1680f507c4",
+      "explorerUrl": "https://sepolia.arbiscan.io",
+      "nativeCurrency": "ETH"
+    },
+    "optimism_sepolia": {
+      "chainId": 11155420,
+      "rpcUrl": "https://rpc.leanrpc.xyz/rpc?chainId=11155420&apiKey=ak_8166c2e4adfb1fc508ee8d1680f507c4",
+      "explorerUrl": "https://sepolia-optimism.etherscan.io",
+      "nativeCurrency": "ETH"
+    },
+    "base_sepolia": {
+      "chainId": 84532,
+      "rpcUrl": "https://rpc.leanrpc.xyz/rpc?chainId=84532&apiKey=ak_8166c2e4adfb1fc508ee8d1680f507c4",
+      "explorerUrl": "https://sepolia.basescan.org",
+      "nativeCurrency": "ETH"
+    },
+    "mezo_testnet": {
+      "chainId": 31611,
+      "rpcUrl": "https://rpc.test.mezo.org",
+      "explorerUrl": "https://explorer.test.mezo.org",
+      "nativeCurrency": "BTC",
+      "evmVersion": "london"
+    }
+  },
+  "mainnets": {
+    "ethereum": {
+      "chainId": 1,
+      "rpcUrl": "https://rpc.leanrpc.xyz/rpc?chainId=1&apiKey=ak_8166c2e4adfb1fc508ee8d1680f507c4",
+      "explorerUrl": "https://etherscan.io",
+      "nativeCurrency": "ETH"
+    },
+    "polygon": {
+      "chainId": 137,
+      "rpcUrl": "https://rpc.leanrpc.xyz/rpc?chainId=137&apiKey=ak_8166c2e4adfb1fc508ee8d1680f507c4",
+      "explorerUrl": "https://polygonscan.com",
+      "nativeCurrency": "MATIC"
+    },
+    "arbitrum": {
+      "chainId": 42161,
+      "rpcUrl": "https://rpc.leanrpc.xyz/rpc?chainId=42161&apiKey=ak_8166c2e4adfb1fc508ee8d1680f507c4",
+      "explorerUrl": "https://arbiscan.io",
+      "nativeCurrency": "ETH"
+    },
+    "optimism": {
+      "chainId": 10,
+      "rpcUrl": "https://rpc.leanrpc.xyz/rpc?chainId=10&apiKey=ak_8166c2e4adfb1fc508ee8d1680f507c4",
+      "explorerUrl": "https://optimistic.etherscan.io",
+      "nativeCurrency": "ETH"
+    },
+    "base": {
+      "chainId": 8453,
+      "rpcUrl": "https://rpc.leanrpc.xyz/rpc?chainId=8453&apiKey=ak_8166c2e4adfb1fc508ee8d1680f507c4",
+      "explorerUrl": "https://basescan.org",
+      "nativeCurrency": "ETH"
+    },
+     "filecoin": {
+      "chainId": 314159,
+      "rpcUrl": "https://rpc.ankr.com/filecoin_testnet",
+      "explorerUrl": "https://filecoin.blockscout.com",
+      "nativeCurrency": "FIL",
+      "gasLimit": 20000000
+    },
+    "flow": {
+      "chainId": 545,
+      "rpcUrl": "https://rpc.leanrpc.xyz/rpc?chainId=545&apiKey=ak_8166c2e4adfb1fc508ee8d1680f507c4",
+      "explorerUrl": "https://flow.blockscout.com",
+      "nativeCurrency": "FLOW"
+    }
+  }
+}

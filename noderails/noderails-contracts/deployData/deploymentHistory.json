@@ -1,0 +1,14 @@
+[
+  {
+    "chainId": "1952",
+    "contract": "NodeRailsEscrow",
+    "address": "0x5a4bc03b982a909fc1e665cf63c5e662ee74cb2a",
+    "deployedAt": "2026-09-25 16:53:40 UTC"
+  },
+  {
+    "chainId": "1952",
+    "contract": "NodeRailsMerchantManager",
+    "address": "0x2fa8ec8170e74afa89991e44e7d8c984f7867e86",
+    "deployedAt": "2026-09-25 16:53:40 UTC"
+  }
+]
