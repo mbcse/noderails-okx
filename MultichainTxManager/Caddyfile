@@ -1,0 +1,11 @@
+# ─────────────────────────────────────────────────────────────
+# Caddyfile — reverse proxy for MTXM backend
+# ─────────────────────────────────────────────────────────────
+# Replace {$DOMAIN} with your actual domain or set it as an
+# environment variable in docker-compose.  Caddy will auto-
+# provision a TLS certificate via Let's Encrypt.
+# ─────────────────────────────────────────────────────────────
+
+{$DOMAIN:localhost} {
+	reverse_proxy backend:4000
+}

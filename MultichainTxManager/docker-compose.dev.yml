@@ -1,0 +1,53 @@
+# ─────────────────────────────────────────────────────────────
+# MTXM Local Development — same as prod but without Caddy
+# ─────────────────────────────────────────────────────────────
+# Usage:
+#   cp .env.example .env   # fill in real values
+#   docker compose -f docker-compose.dev.yml up -d --build
+# ─────────────────────────────────────────────────────────────
+
+services:
+  # ── Redis (durable — AOF + RDB snapshots) ─────────────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: >
+      redis-server
+      --maxmemory 256mb
+      --maxmemory-policy noeviction
+      --requirepass ${REDIS_PASSWORD:-changeme}
+      --appendonly yes
+      --appendfsync everysec
+      --save 900 1
+      --save 300 10
+      --save 60 10000
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-changeme}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Backend ───────────────────────────────────────────────
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      PORT: "4000"
+      REDIS_URL: "redis://:${REDIS_PASSWORD:-changeme}@redis:6379"
+    ports:
+      - "4000:4000"
+
+volumes:
+  redisdata:
