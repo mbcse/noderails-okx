@@ -1,0 +1,241 @@
+// ────────────────────────────────────────────────────────────
+// Prisma Schema — Multichain Transaction Manager
+// ────────────────────────────────────────────────────────────
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ── Auth ────────────────────────────────────────────────────
+
+enum AdminRole {
+  OWNER
+  ADMIN
+  VIEWER
+}
+
+model AdminUser {
+  id             String    @id @default(cuid())
+  email          String    @unique
+  name           String
+  hashedPassword String
+  role           AdminRole @default(ADMIN)
+  tokenVersion   Int       @default(0) // incremented on logout to revoke all refresh tokens
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@map("admin_users")
+}
+
+// ── Project ─────────────────────────────────────────────────
+
+model Project {
+  id          String  @id @default(cuid())
+  name        String
+  description String?
+  apiKey      String  @unique
+  isActive    Boolean @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  chains           Chain[]
+  signerKeys       SignerKey[]
+  transactions     Transaction[]
+  webhookEndpoints WebhookEndpoint[]
+
+  @@map("projects")
+}
+
+// ── Chain ───────────────────────────────────────────────────
+
+enum ChainType {
+  EVM
+  SOLANA
+  SUI
+}
+
+model Chain {
+  id             String  @id @default(cuid())
+  projectId      String
+  project        Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  chainType      ChainType @default(EVM)
+  name           String
+  chainId        Int
+  rpcUrls        String[]
+  explorerUrl    String?
+  nativeCurrency String
+  isTestnet      Boolean @default(false)
+  isActive       Boolean @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  transactions Transaction[]
+
+  @@unique([projectId, chainId])
+  @@map("chains")
+}
+
+// ── Signer Key ──────────────────────────────────────────────
+
+enum KeyAdapterType {
+  ENV
+  KMS
+}
+
+model SignerKey {
+  id           String         @id @default(cuid())
+  projectId    String
+  project      Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  label        String
+  chainType    ChainType      @default(EVM)
+  address      String
+  adapterType  KeyAdapterType
+  encryptedKey String?        // AES-encrypted private key (ENV adapter)
+  kmsKeyId     String?        // AWS KMS key ID (KMS adapter)
+  isMaster     Boolean        @default(false)
+  isActive     Boolean        @default(true)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  transactions Transaction[]
+
+  @@map("signer_keys")
+}
+
+// ── Transaction ─────────────────────────────────────────────
+
+enum TransactionStatus {
+  QUEUED
+  SIGNING
+  SIGNED
+  BROADCASTING
+  BROADCAST
+  CONFIRMING
+  CONFIRMED
+  FAILED
+  STUCK
+  CANCELLED
+  SPEED_UP
+}
+
+model Transaction {
+  id                   String            @id @default(cuid())
+  projectId            String
+  project              Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  chainId              String
+  chain                Chain             @relation(fields: [chainId], references: [id], onDelete: Cascade)
+  signerId             String
+  signer               SignerKey         @relation(fields: [signerId], references: [id])
+  hash                 String?           @unique
+  from                 String
+  to                   String
+  value                String            @default("0")
+  data                 String?
+  solanaInstructions    Json?
+  solanaRawTransactionBase64 String?
+  solanaCuLimit         Int?
+  solanaCuPriceMicroLamports Int?
+  suiMoveCalls          Json?
+  suiRawTransactionBase64 String?
+  suiGasBudget          String?
+  suiGasPrice           String?
+  signedData           String?           // signed tx hex (set by signing worker)
+  nonce                Int?
+  gasLimit             String?
+  gasPrice             String?
+  maxFeePerGas         String?
+  maxPriorityFeePerGas String?
+  status               TransactionStatus @default(QUEUED)
+  blockNumber          Int?
+  blockHash            String?
+  receipt              Json?
+  metadata             Json?
+  errorMessage         String?
+  attempts             Int               @default(0)
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+  confirmedAt          DateTime?
+
+  @@index([projectId, status])
+  @@index([chainId, from])
+  @@index([status, updatedAt])
+  @@map("transactions")
+}
+
+// ── Webhook ─────────────────────────────────────────────────
+
+model WebhookEndpoint {
+  id              String    @id @default(cuid())
+  projectId       String
+  project         Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  url             String
+  secret          String
+  events          String[]  // e.g. ["tx.confirmed", "tx.failed"]
+  isActive        Boolean   @default(true)
+  failureCount    Int       @default(0)
+  lastDeliveredAt DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  deliveries WebhookDelivery[]
+
+  @@map("webhook_endpoints")
+}
+
+model WebhookDelivery {
+  id           String          @id @default(cuid())
+  endpointId   String
+  endpoint     WebhookEndpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+  event        String          // e.g. "tx.confirmed"
+  payload      Json
+  statusCode   Int?
+  responseBody String?
+  latencyMs    Int?
+  attempts     Int             @default(0)
+  error        String?
+  deliveredAt  DateTime?
+  nextRetryAt  DateTime?
+  createdAt    DateTime        @default(now())
+
+  @@index([endpointId, createdAt])
+  @@map("webhook_deliveries")
+}
+
+// ── Settings ────────────────────────────────────────────────
+
+model Setting {
+  key         String   @id
+  value       String
+  label       String
+  description String?
+  category    String
+  dataType    String   @default("string") // string | number | boolean
+  updatedAt   DateTime @updatedAt
+
+  @@map("settings")
+}
+
+// ── Funding Log ─────────────────────────────────────────────
+
+model FundingLog {
+  id            String   @id @default(cuid())
+  projectId     String
+  chainId       String
+  chainName     String
+  fromAddress   String   // master wallet
+  toAddress     String   // funded signer
+  txHash        String?
+  amountWei     String
+  status        String   @default("PENDING") // PENDING | CONFIRMED | FAILED
+  errorMessage  String?
+  createdAt     DateTime @default(now())
+
+  @@index([projectId, toAddress])
+  @@index([toAddress, createdAt])
+  @@map("funding_logs")
+}
