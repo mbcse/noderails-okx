@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.turbo/
+*.tsbuildinfo
+
+# Prisma 7 — generated client (re-generate via `prisma generate`)
+src/generated/
