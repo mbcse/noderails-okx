@@ -1,0 +1,34 @@
+{
+  "name": "noderails-indexer",
+  "version": "1.0.0",
+  "private": true,
+  "description": "NodeRails Indexer - OKX X Layer submission snapshot",
+  "scripts": {
+    "dev": "echo '[submission] intentionally disabled: dev' && exit 1",
+    "dev:backend": "echo '[submission] intentionally disabled: dev:backend' && exit 1",
+    "dev:admin": "echo '[submission] intentionally disabled: dev:admin' && exit 1",
+    "build": "echo '[submission] intentionally disabled: build' && exit 1",
+    "build:backend": "turbo run build --filter=backend",
+    "build:admin": "turbo run build --filter=admin",
+    "start": "echo '[submission] intentionally disabled: start' && exit 1",
+    "db:generate": "echo '[submission] intentionally disabled' && exit 1",
+    "db:migrate": "echo '[submission] intentionally disabled: db:migrate' && exit 1",
+    "db:push": "echo '[submission] intentionally disabled: db:push' && exit 1",
+    "db:studio": "echo '[submission] intentionally disabled' && exit 1",
+    "db:reset": "echo '[submission] intentionally disabled' && exit 1",
+    "test:project-api": "node packages/backend/test/project-api.test.js",
+    "test:solana-idl": "pnpm --filter backend exec tsx test/solana-idl-parser.test.ts",
+    "run:webhooktest-server": "node webhook-test-server.js",
+    "submission:note": "echo 'OKX submission snapshot: review-only, not production-runnable' && exit 1"
+  },
+  "workspaces": [
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "packageManager": "pnpm@9.0.0",
+  "devDependencies": {
+    "turbo": "^2.8.10"
+  }
+}

@@ -1,0 +1,34 @@
+# Dependencies
+node_modules
+**/node_modules
+.pnpm-store
+
+# Admin (frontend) — not needed for backend image
+packages/admin
+
+# Git and IDE
+.git
+.gitignore
+.cursor
+.vscode
+*.md
+!README.md
+
+# Build outputs (rebuilt in image)
+packages/backend/dist
+packages/backend/src/generated
+
+# Env and secrets (inject at runtime)
+.env
+.env.*
+!.env.example
+**/ca.pem
+
+# Tests and tooling
+**/*.test.js
+**/*.test.ts
+**/__tests__
+**/test
+coverage
+*.log
+.DS_Store
