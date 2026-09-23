@@ -1,0 +1,276 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// Multi-tenant projects
+model Project {
+  id        String   @id @default(uuid())
+  name      String
+  apiKey    String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  contracts        Contract[]
+  webhooks         Webhook[]
+  watchedAddresses WatchedAddress[]
+
+  @@map("projects")
+}
+
+// Supported blockchain chains
+model Chain {
+  id             String   @id @default(uuid())
+  protocol       String   @default("evm")
+  chainId        Int      @unique
+  name           String
+  rpcUrls        Json     // Array of RPC URLs
+  graphqlUrls    Json?    // Optional GraphQL URLs (SUI chains)
+  activeRpcIndex Int      @default(0)
+  blockTime      Int      @default(12000) // milliseconds
+  finalityBlocks Int      @default(64)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  contracts         Contract[]
+  indexStates       IndexState[]
+  nativeIndexStates NativeIndexState[]
+
+  @@map("chains")
+}
+
+// Contracts to index (per project)
+model Contract {
+  id         String   @id @default(uuid())
+  projectId  String
+  chainId    Int
+  protocol   String   @default("evm")
+  address    String
+  abi        Json     // Full contract ABI
+  startBlock BigInt   @default(0)
+  name       String
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  project            Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  chain              Chain               @relation(fields: [chainId], references: [chainId], onDelete: Cascade)
+  eventSubscriptions EventSubscription[]
+  indexStates        IndexState[]
+
+  @@unique([projectId, chainId, protocol, address])
+  @@index([chainId])
+  @@index([projectId])
+  @@map("contracts")
+}
+
+// Addresses to watch for native (ETH) send/receive per project per chain
+// chainId = null means "all chains" (watched on every active chain, including future ones)
+model WatchedAddress {
+  id        String   @id @default(uuid())
+  projectId String
+  chainId   Int?     // null = all chains
+  address   String   // lowercase
+  direction String   @default("both") // "in" | "out" | "both"
+  label     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, chainId, address])
+  @@index([chainId, address])
+  @@map("watched_addresses")
+}
+
+// Event types to watch (auto-extracted from ABI)
+model EventSubscription {
+  id             String   @id @default(uuid())
+  contractId     String
+  eventName      String
+  eventSignature String   // e.g., "Transfer(address,address,uint256)"
+  topic0           String   // keccak256 hash of event signature
+  abiItem          Json     // The specific ABI item for this event
+  filterConditions Json?    // Optional arg-level filtering, e.g. {"args.to":{"in":["0x..."]}}
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  contract             Contract              @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  indexedEvents        IndexedEvent[]
+  webhookSubscriptions WebhookSubscription[]
+
+  @@unique([contractId, eventName])
+  @@index([topic0])
+  @@map("event_subscriptions")
+}
+
+// Indexed blockchain events
+model IndexedEvent {
+  id              String   @id @default(uuid())
+  subscriptionId  String
+  chainId         Int
+  blockNumber     BigInt
+  blockHash       String
+  transactionHash String
+  logIndex        Int
+  args            Json     // Decoded event arguments
+  timestamp       DateTime
+  createdAt       DateTime @default(now())
+
+  subscription      EventSubscription  @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  webhookDeliveries WebhookDelivery[]
+
+  @@unique([chainId, transactionHash, logIndex])
+  @@index([subscriptionId, createdAt(sort: Desc)])
+  @@index([chainId, blockNumber])
+  @@index([transactionHash])
+  @@map("indexed_events")
+}
+
+// Indexing state per chain/contract for checkpointing
+model IndexState {
+  id                 String   @id @default(uuid())
+  chainId            Int
+  contractId         String
+  lastIndexedBlock   BigInt
+  lastFinalizedBlock BigInt?
+  updatedAt          DateTime @updatedAt
+
+  chain    Chain    @relation(fields: [chainId], references: [chainId], onDelete: Cascade)
+  contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@unique([chainId, contractId])
+  @@map("index_states")
+}
+
+// Indexed native (ETH) transfers — one row per tx with value
+model NativeTransfer {
+  id              String   @id @default(uuid())
+  chainId         Int
+  blockNumber     BigInt
+  blockHash       String
+  transactionHash String
+  from            String
+  to              String?  // null for contract creation
+  value           String   // wei as string
+  timestamp       DateTime
+  createdAt       DateTime @default(now())
+
+  webhookDeliveries WebhookDelivery[]
+
+  @@unique([chainId, transactionHash])
+  @@index([chainId, blockNumber])
+  @@index([from])
+  @@index([to])
+  @@map("native_transfers")
+}
+
+// Native indexer cursor per chain
+model NativeIndexState {
+  chainId           Int      @unique
+  lastIndexedBlock  BigInt
+  updatedAt         DateTime @updatedAt
+
+  chain Chain @relation(fields: [chainId], references: [chainId], onDelete: Cascade)
+
+  @@map("native_index_states")
+}
+
+// Webhook endpoints for event notifications
+model Webhook {
+  id               String   @id @default(uuid())
+  projectId        String
+  name             String
+  url              String
+  secret           String   // For HMAC signing
+  isActive         Boolean  @default(true)
+  subscribeNative  Boolean  @default(false)
+  nativeChainId    Int?     // null = all chains
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  project       Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  subscriptions WebhookSubscription[]
+  deliveries    WebhookDelivery[]
+
+  @@index([projectId])
+  @@map("webhooks")
+}
+
+// Link webhooks to event subscriptions
+model WebhookSubscription {
+  id                  String   @id @default(uuid())
+  webhookId           String
+  eventSubscriptionId String
+  filterConditions    Json?    // Optional filtering conditions
+  createdAt           DateTime @default(now())
+
+  webhook           Webhook           @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+  eventSubscription EventSubscription @relation(fields: [eventSubscriptionId], references: [id], onDelete: Cascade)
+
+  @@unique([webhookId, eventSubscriptionId])
+  @@map("webhook_subscriptions")
+}
+
+// Webhook delivery log (eventId or nativeTransferId set)
+model WebhookDelivery {
+  id                String    @id @default(uuid())
+  webhookId         String
+  eventId           String?   // contract event
+  nativeTransferId  String?   // native transfer
+  status            String    @default("pending") // pending, delivered, failed
+  attempts          Int       @default(0)
+  lastAttemptAt     DateTime?
+  responseCode      Int?
+  errorMessage      String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  webhook        Webhook        @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+  event          IndexedEvent?  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  nativeTransfer NativeTransfer? @relation(fields: [nativeTransferId], references: [id], onDelete: Cascade)
+
+  @@index([webhookId, status])
+  @@index([eventId])
+  @@index([nativeTransferId])
+  @@map("webhook_deliveries")
+}
+
+// Compact trace of processed events (kept after full data is purged)
+model EventTrace {
+  id              String   @id @default(uuid())
+  subscriptionId  String
+  chainId         Int
+  blockNumber     BigInt
+  transactionHash String
+  logIndex        Int
+  eventName       String
+  processedAt     DateTime @default(now())
+
+  @@index([chainId, blockNumber])
+  @@index([subscriptionId])
+  @@map("event_traces")
+}
+
+// Platform settings (key-value store)
+model Setting {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  value       String
+  type        String   @default("string") // string, number, boolean
+  category    String   @default("general")
+  label       String   @default("")
+  description String   @default("")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([category])
+  @@map("settings")
+}
