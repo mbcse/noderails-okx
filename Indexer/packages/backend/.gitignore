@@ -1,0 +1,17 @@
+# Backend-specific ignores
+
+# Build output
+dist/
+
+# Prisma generated client (regenerate with: npx prisma generate)
+src/generated/
+
+# Environment
+.env
+!.env.example
+
+# SSL certs
+src/ca.pem
+
+# Logs
+*.log
