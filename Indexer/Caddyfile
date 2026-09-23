@@ -1,0 +1,6 @@
+# Noderails Indexer — reverse proxy and automatic HTTPS
+# Caddy obtains and renews TLS for app.example.local via Let's Encrypt.
+
+app.example.local {
+    reverse_proxy indexer:3001
+}
