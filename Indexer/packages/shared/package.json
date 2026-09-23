@@ -1,0 +1,14 @@
+{
+  "name": "shared",
+  "version": "1.0.0",
+  "private": true,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "echo '[submission] intentionally disabled' && exit 1",
+    "dev": "echo '[submission] intentionally disabled' && exit 1"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  }
+}
