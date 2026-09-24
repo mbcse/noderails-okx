@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "BankSettlementStatus" ADD VALUE IF NOT EXISTS 'FUNDS_AT_DEPOSIT_FAILED';

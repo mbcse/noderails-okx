@@ -1,0 +1,40 @@
+{
+  "name": "@noderails/database",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Database client and Prisma schema for NodeRails",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "echo '[submission] intentionally disabled' && exit 1",
+    "dev": "echo '[submission] intentionally disabled' && exit 1",
+    "clean": "rm -rf dist src/generated",
+    "generate": "echo '[submission] intentionally disabled' && exit 1",
+    "push": "prisma db push",
+    "migrate": "echo '[submission] intentionally disabled' && exit 1",
+    "migrate:deploy": "echo '[submission] intentionally disabled' && exit 1",
+    "reset": "prisma migrate reset",
+    "studio": "echo '[submission] intentionally disabled' && exit 1",
+    "seed": "echo '[submission] intentionally disabled' && exit 1",
+    "lint": "echo '[submission] intentionally disabled' && exit 1"
+  },
+  "dependencies": {
+    "@prisma/adapter-pg": "^7.3.0",
+    "@prisma/client": "^7.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "dotenv": "^16.4.0",
+    "prisma": "^7.3.0",
+    "tsx": "^4.10.0",
+    "typescript": "^5.4.0"
+  }
+}

@@ -1,0 +1,2132 @@
+// Prisma schema for NodeRails Payment Platform
+// Database: PostgreSQL
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============================================================================
+// MERCHANT & AUTH
+// ============================================================================
+
+model Merchant {
+  id            String       @id @default(uuid())
+  email         String       @unique
+  passwordHash  String?      // null for OAuth-only users
+  googleId      String?      @unique
+  role          MerchantRole @default(MERCHANT)
+  merchantType  MerchantType @default(BUSINESS)
+
+  /// Organization / company name shown on checkout pages
+  orgName       String?      @db.VarChar(200)
+  businessName  String?      @db.VarChar(200)
+  individualName String?     @db.VarChar(200)
+
+  /// Platform admin can suspend a merchant to block all API access
+  isSuspended     Boolean    @default(false)
+  suspendedReason String?    @db.VarChar(500)
+
+  /// Per-merchant timelock overrides (null = use platform defaults)
+  disputeStartSeconds Int?   // Seconds from capture before dispute window opens
+  settlementSeconds   Int?   // Seconds from capture until settlement allowed
+
+  /// Per-merchant platform fee override in basis points (null = use platform default)
+  /// 200 = 2%, max 1000 = 10%
+  platformFeeBps      Int?
+  conversionFeeBps    Int?
+  singleChainSettlementFeeBps Int?
+  bankSettlementFeeBps Int?
+
+  emailVerified Boolean      @default(false)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  apps          App[]
+  payoutIntents    PayoutIntent[]
+  payoutSchedules  PayoutSchedule[]
+  payoutContacts   PayoutContact[]
+  taxRates         TaxRate[]
+  /// Team members that belong to this merchant's organization
+  teamMembers   TeamMember[]
+  fiatProfiles  FiatProfile[]
+  emailCampaignRecipients EmailCampaignRecipient[]
+
+  @@map("merchants")
+}
+
+// ============================================================================
+// TEAM MEMBERS — Org-level and app-level access for invited users
+// ============================================================================
+
+/// A team member invited by the merchant (org owner).
+/// Permissions are stored as a string array of permission keys.
+/// App access is controlled via allAppsAccess flag or specific TeamMemberApp entries.
+model TeamMember {
+  id               String             @id @default(uuid())
+  merchantId       String
+  email            String
+  name             String?            @db.VarChar(200)
+  permissions      String[]           @default([])
+  allAppsAccess    Boolean            @default(false)
+  status           TeamMemberStatus   @default(PENDING)
+  passwordHash     String?
+  inviteToken      String?            @unique
+  inviteExpiresAt  DateTime?
+
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  merchant         Merchant           @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  /// Which specific apps this member can access (only relevant when allAppsAccess is false)
+  appAccess        TeamMemberApp[]
+
+  @@unique([merchantId, email])
+  @@index([merchantId])
+  @@index([email])
+  @@index([inviteToken])
+  @@map("team_members")
+}
+
+enum TeamMemberStatus {
+  PENDING
+  ACTIVE
+}
+
+/// Blockchain family for supported chains (EVM vs Solana vs Sui).
+enum ChainType {
+  EVM
+  SOLANA
+  SUI
+}
+
+/// Join table linking an APP_MEMBER to specific apps they can access
+model TeamMemberApp {
+  id           String     @id @default(uuid())
+  teamMemberId String
+  appId        String
+
+  createdAt    DateTime   @default(now())
+
+  teamMember   TeamMember @relation(fields: [teamMemberId], references: [id], onDelete: Cascade)
+  app          App        @relation(fields: [appId], references: [id], onDelete: Cascade)
+
+  @@unique([teamMemberId, appId])
+  @@index([teamMemberId])
+  @@index([appId])
+  @@map("team_member_apps")
+}
+
+// ============================================================================
+// TAX RATES — Merchant-scoped tax rate definitions
+// ============================================================================
+
+model TaxRate {
+  id            String    @id @default(uuid())
+  merchantId    String
+
+  /// Display name shown on invoices/checkout ("GST", "VAT", "Sales Tax")
+  displayName   String    @db.VarChar(100)
+
+  /// Tax percentage (e.g. 18.00 for 18%)
+  percentage    Decimal   @db.Decimal(5, 2)
+
+  /// If true, the tax is already included in the item price (reverse-calc)
+  /// If false, tax is added on top of the item price
+  inclusive     Boolean   @default(false)
+
+  /// Optional jurisdiction label ("IN", "EU", "US-CA")
+  jurisdiction  String?   @db.VarChar(50)
+
+  /// Optional longer description
+  description   String?   @db.VarChar(500)
+
+  /// Soft-delete — inactive tax rates won't be selectable but remain on historical records
+  isActive      Boolean   @default(true)
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  merchant      Merchant  @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  // Reverse relations
+  invoices      Invoice[]
+  invoiceItems  InvoiceItem[]
+  paymentLinks  PaymentLink[]
+  productPlans  ProductPlan[]
+
+  @@index([merchantId])
+  @@map("tax_rates")
+}
+
+// ============================================================================
+// PLATFORM CONFIG — Singleton row for platform-level settings
+// ============================================================================
+
+model PlatformConfig {
+  id                  String   @id @default("singleton")
+
+  /// Seconds from capture before dispute window opens (default: 1 day)
+  disputeStartSeconds Int      @default(86400)
+  /// Seconds from capture until settlement is allowed (default: 7 days)
+  settlementSeconds   Int      @default(604800)
+
+  /// Platform fee in basis points (default: 200 = 2%, max 1000 = 10%)
+  platformFeeBps      Int      @default(200)
+  conversionFeeBps    Int      @default(0)
+  singleChainSettlementFeeBps Int @default(0)
+  bankSettlementFeeBps Int     @default(0)
+  /// 1inch exact-out quote lifetime at checkout (default 120s)
+  swapQuoteTtlSeconds Int      @default(120)
+
+  /// Default settlement chain when a merchant enables single-chain settlement without a pick
+  defaultSettlementChainId Int?
+  /// Default conversion target token key (e.g. USDC-137)
+  defaultTargetTokenKey String? @db.VarChar(50)
+
+  // ── Webhook delivery configuration ──
+
+  /// Number of redundant sends per webhook event (default: 3)
+  webhookRedundantSends   Int   @default(3)
+  /// Delays (ms) between each redundant send, JSON array e.g. [0, 60000, 300000]
+  webhookRedundantDelays  Json  @default("[0, 60000, 300000]")
+  /// Base delay in ms for retry exponential backoff (default: 5000 = 5s)
+  webhookBaseDelayMs      Int   @default(5000)
+  /// Exponential backoff multiplier (stored as x100 int, default: 130 = 1.3)
+  webhookBackoffMultiplier Int  @default(130)
+  /// Max delay in ms between retries (default: 3600000 = 1h)
+  webhookMaxDelayMs       Int   @default(3600000)
+  /// Max retry attempts per delivery (default: 50)
+  webhookMaxRetries       Int   @default(50)
+
+  /// Opening fee for global bank accounts (USD, per country per year)
+  bankFeeIndividualUsd Decimal @default(30) @db.Decimal(10, 2)
+  bankFeeBusinessUsd   Decimal @default(40) @db.Decimal(10, 2)
+  bankFeeTestAppId     String?
+  bankFeeTestApiKey    String?
+  bankFeeTestWebhookSecret String?
+  bankFeeLiveAppId     String?
+  bankFeeLiveApiKey    String?
+  bankFeeLiveWebhookSecret String?
+
+  /// Published rate card (display only)
+  bankOnrampFeeBps    Int     @default(50)
+  bankOfframpFeeBps   Int     @default(25)
+  bankFxUsdEurBps     Int     @default(50)
+  bankFxUsdMxnBps     Int     @default(50)
+  bankFxUsdGbpBps     Int     @default(50)
+  bankFxUsdBrlBps     Int     @default(55)
+  bankAchFeeCents     Int     @default(50)
+  bankWireFeeCents    Int     @default(1000)
+  bankGasFeeNote      String? @db.VarChar(200)
+
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@map("platform_config")
+}
+
+model App {
+  id                       String      @id @default(uuid())
+  merchantId               String
+  name                     String
+  environment              Environment @default(TEST)
+
+  // Wallet configuration
+  receivingWallet          String?     // For receiving payments
+  receivingWalletSignature String?     // Proof of ownership
+  payoutWallet             String?     // EVM payout wallet
+  payoutApproved           Boolean     @default(false) // Has approved contract
+  payoutWalletSolana       String?
+  payoutWalletSui          String?
+  payoutAuthSignature      String?     @db.Text
+  payoutAuthValidUntil     DateTime?
+  payoutAuthSolanaSignature String?    @db.Text
+  payoutAuthSolanaValidUntil DateTime?
+  payoutAuthSuiSignature   String?     @db.Text
+  payoutAuthSuiValidUntil  DateTime?
+
+  createdAt                DateTime    @default(now())
+  updatedAt                DateTime    @updatedAt
+
+  merchant                 Merchant    @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  apiKeys                  ApiKey[]
+  paymentIntents           PaymentIntent[]
+  payoutIntents            PayoutIntent[]
+  payoutSchedules          PayoutSchedule[]
+  payoutContacts           PayoutContact[]
+  webhooks                 Webhook[]
+  subscriptions            Subscription[]
+  invoices                 Invoice[]
+  checkoutSessions         CheckoutSession[]
+  productPlans             ProductPlan[]
+  customerAccounts         CustomerAccount[]
+  appChains                AppChain[]
+  appTokens                AppToken[]
+  settlementConfig         SettlementConfig?
+  bankSettlements          BankSettlement[]
+  walletChangeLogs         WalletChangeLog[]
+  paymentLinks             PaymentLink[]
+  teamMemberApps           TeamMemberApp[]
+
+  @@index([merchantId])
+  @@map("apps")
+}
+
+model ApiKey {
+  id          String   @id @default(uuid())
+  appId       String
+  name        String   @default("Default")
+  keyHash     String   @unique // SHA256 hash of full key
+  keyPrefix   String   // e.g. "pk_test_abc1" for display
+  type        ApiKeyType
+  active      Boolean  @default(true)
+  lastUsedAt  DateTime?
+  expiresAt   DateTime?
+  createdAt   DateTime @default(now())
+
+  app         App      @relation(fields: [appId], references: [id], onDelete: Cascade)
+
+  @@index([appId])
+  @@index([keyHash])
+  @@map("api_keys")
+}
+
+// ============================================================================
+// ADMIN-MANAGED CHAINS & TOKENS
+// ============================================================================
+
+/// Supported blockchains managed by admin. Merchants enable/disable from this list.
+/// Each chain requires deployed contract addresses (escrow + merchant manager) to be usable.
+model SupportedChain {
+  id                      String    @id @default(uuid())
+  chainId                 Int       @unique
+  /// EVM vs Solana — drives address validation and checkout.
+  chainType               ChainType @default(EVM)
+  name                    String    @db.VarChar(100)
+  displayName             String    @db.VarChar(100)
+  rpcUrl                  String?   @db.Text
+  explorerUrl             String?   @db.Text
+  nativeCurrencySymbol    String    @db.VarChar(10)
+  nativeCurrencyDecimals  Int       @default(18)
+  /// Escrow package id (Sui) or program id (Solana) or contract (EVM).
+  escrowAddress           String    @db.VarChar(66)
+  /// Merchant manager package (Sui) / program (Solana) / contract (EVM).
+  merchantManagerAddress  String    @db.VarChar(66)
+  /// Sui shared EscrowConfig object id (null for EVM/Solana).
+  escrowConfigObjectId        String?   @db.VarChar(66)
+  /// Sui shared PaymentRegistry object id (null for EVM/Solana).
+  paymentRegistryObjectId     String?   @db.VarChar(66)
+  /// Sui shared WalletRegistry object id (null for EVM/Solana).
+  walletRegistryObjectId      String?   @db.VarChar(66)
+  /// Sui shared MerchConfig object id (null for EVM/Solana).
+  merchantManagerConfigObjectId String? @db.VarChar(66)
+  /// Optional MTXM chain row id for this network (stringified).
+  mtxmChainDbId           String?   @db.VarChar(64)
+  supports7702            Boolean   @default(false)
+  isTestnet               Boolean   @default(false)
+  isEnabled               Boolean   @default(true)
+  iconUrl                 String?   @db.Text
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+
+  tokens                  SupportedToken[]
+  appChains               AppChain[]
+  customerWallets         CustomerWallet[]
+
+  @@map("supported_chains")
+}
+
+/// Supported tokens managed by admin. Chain-specific (USDC on ETH ≠ USDC on Polygon).
+model SupportedToken {
+  id                      String    @id @default(uuid())
+  chainId                 Int
+  contractAddress         String    @db.VarChar(128)
+  symbol                  String    @db.VarChar(20)
+  name                    String    @db.VarChar(100)
+  decimals                Int
+  /// Token identifier: SYMBOL-CHAINID (e.g. USDC-1, USDC-137)
+  tokenKey                String    @db.VarChar(50)
+
+  // Authorization method support at token level
+  supportsNativeTransfer  Boolean   @default(true)
+  supportsPermit          Boolean   @default(false)
+
+  // Permit specific metadata (EIP-2612)
+  permitVersion           String?   @db.VarChar(10)
+  permitType              String?   @db.VarChar(20) // EIP2612, DAI_LIKE
+
+  isStablecoin            Boolean   @default(false)
+  isEnabled               Boolean   @default(true)
+  iconUrl                 String?   @db.Text
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+
+  chain                   SupportedChain @relation(fields: [chainId], references: [chainId], onDelete: Cascade)
+  appTokens               AppToken[]
+
+  @@unique([chainId, contractAddress])
+  @@index([tokenKey])
+  @@index([chainId])
+  @@index([symbol])
+  @@map("supported_tokens")
+}
+
+/// Supported fiat currencies managed by admin.
+/// Used for payment links, invoices, checkout sessions, and price conversion.
+model SupportedCurrency {
+  id          String    @id @default(uuid())
+  code        String    @unique @db.VarChar(10)   // ISO 4217 code: USD, EUR, INR, CAD
+  name        String    @db.VarChar(100)           // "US Dollar", "Euro", "Indian Rupee"
+  symbol      String    @db.VarChar(5)             // "$", "€", "₹", "C$"
+  isEnabled   Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@map("supported_currencies")
+}
+
+// ============================================================================
+// APP-LEVEL CHAIN & TOKEN CONFIGURATION
+// ============================================================================
+
+/// Chains enabled at merchant app level
+model AppChain {
+  id                String    @id @default(uuid())
+  appId             String
+  chainId           Int
+  isEnabled         Boolean   @default(true)
+  /// Merchant's contract/wallet address on this chain for receiving
+  settlementAddress String?   @db.VarChar(66)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  app               App              @relation(fields: [appId], references: [id], onDelete: Cascade)
+  chain             SupportedChain   @relation(fields: [chainId], references: [chainId], onDelete: Cascade)
+
+  @@unique([appId, chainId])
+  @@index([appId])
+  @@map("app_chains")
+}
+
+/// Tokens enabled at merchant app level
+model AppToken {
+  id                String    @id @default(uuid())
+  appId             String
+  supportedTokenId  String
+  isEnabled         Boolean   @default(true)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  app               App            @relation(fields: [appId], references: [id], onDelete: Cascade)
+  supportedToken    SupportedToken @relation(fields: [supportedTokenId], references: [id], onDelete: Cascade)
+
+  @@unique([appId, supportedTokenId])
+  @@index([appId])
+  @@map("app_tokens")
+}
+
+// ============================================================================
+// CUSTOMER ACCOUNTS
+// ============================================================================
+
+/// Customer accounts tied to a merchant app
+model CustomerAccount {
+  id          String    @id @default(uuid())
+  appId       String
+  /// External reference the merchant uses to identify this customer
+  externalId  String?   @db.VarChar(255)
+  email       String?   @db.VarChar(255)
+  name        String?   @db.VarChar(255)
+
+  /// Billing / shipping address fields
+  address     String?   @db.Text
+  city        String?   @db.VarChar(255)
+  state       String?   @db.VarChar(255)
+  country     String?   @db.VarChar(255)
+  postalCode  String?   @db.VarChar(50)
+
+  metadata    Json      @default("{}")
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  app               App               @relation(fields: [appId], references: [id], onDelete: Cascade)
+  wallets           CustomerWallet[]
+  paymentIntents    PaymentIntent[]
+  checkoutSessions  CheckoutSession[]
+  subscriptions     Subscription[]
+  invoices          Invoice[]
+
+  @@unique([appId, externalId])
+  @@index([appId])
+  @@map("customer_accounts")
+}
+
+/// Customer wallet addresses (a customer can have multiple wallets across chains)
+model CustomerWallet {
+  id                      String    @id @default(uuid())
+  customerAccountId       String
+  chainId                 Int
+  walletAddress           String    @db.VarChar(66)
+
+  /// For permit/7702 based recurring: has this wallet authorized our contract?
+  hasActiveAuthorization  Boolean   @default(false)
+  authorizationType       String?   @db.VarChar(20) // PERMIT, 7702
+  authorizationTxHash     String?   @db.VarChar(66)
+  authorizedAt            DateTime?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+
+  customerAccount         CustomerAccount @relation(fields: [customerAccountId], references: [id], onDelete: Cascade)
+  chain                   SupportedChain  @relation(fields: [chainId], references: [chainId], onDelete: Cascade)
+  subscriptions           Subscription[]
+
+  @@unique([customerAccountId, chainId, walletAddress])
+  @@index([walletAddress])
+  @@map("customer_wallets")
+}
+
+// ============================================================================
+// PRODUCT PLANS
+// ============================================================================
+
+/// Product plans defined by merchant — single entity combining product + billing definition
+model ProductPlan {
+  id              String    @id @default(uuid())
+  appId           String
+  name            String    @db.VarChar(255)
+  description     String?   @db.Text
+  imageUrl        String?   @db.Text
+
+  /// Plan type: ONE_TIME or SUBSCRIPTION
+  planType        PlanType  @default(ONE_TIME)
+
+  /// Optional default tax rate applied when creating invoices/checkout from this plan
+  taxRateId       String?
+
+  isActive        Boolean   @default(true)
+  metadata        Json      @default("{}")
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  app             App                @relation(fields: [appId], references: [id], onDelete: Cascade)
+  taxRate         TaxRate?           @relation(fields: [taxRateId], references: [id], onDelete: SetNull)
+  prices          ProductPlanPrice[]
+  checkoutSessionItems CheckoutSessionItem[]
+  invoiceItems    InvoiceItem[]
+  subscriptions   Subscription[]
+  paymentLinks    PaymentLink[]
+
+  @@index([appId])
+  @@index([planType])
+  @@map("product_plans")
+}
+
+/// Pricing options for a product plan.
+/// ONE_TIME plan → exactly 1 row.
+/// SUBSCRIPTION plan → 1+ rows (monthly, yearly, etc. → renders toggle on checkout UI).
+model ProductPlanPrice {
+  id                    String    @id @default(uuid())
+  productPlanId         String
+  appId                 String
+
+  /// Amount in fiat (full amount with decimals, e.g. 50.00)
+  amount                Decimal   @db.Decimal(18, 2)
+  currency              String    @default("USD") @db.VarChar(10)
+
+  // Recurring config (only for SUBSCRIPTION plans)
+  billingInterval       BillingInterval?
+  billingIntervalCount  Int       @default(1) // every X intervals
+  trialPeriodDays       Int       @default(0)
+
+  /// Display label for toggle UI: "Monthly", "Annual"
+  nickname              String?   @db.VarChar(100)
+  /// Sort order for display (toggle order)
+  sortOrder             Int       @default(0)
+  /// Is this the default selected option on checkout?
+  isDefault             Boolean   @default(false)
+
+  isActive              Boolean   @default(true)
+  metadata              Json      @default("{}")
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  productPlan           ProductPlan @relation(fields: [productPlanId], references: [id], onDelete: Cascade)
+  checkoutSessionItems  CheckoutSessionItem[]
+  invoiceItems          InvoiceItem[]
+  subscriptions         Subscription[]
+  paymentLinks          PaymentLink[]
+
+  @@index([productPlanId])
+  @@index([appId])
+  @@map("product_plan_prices")
+}
+
+// ============================================================================
+// PAYMENT INTENTS — Core Payment Primitive
+// ============================================================================
+
+model PaymentIntent {
+  id                 String        @id @default(uuid())
+  appId              String
+  customerAccountId  String?
+  externalId         String?       // Merchant's reference ID
+
+  // Fiat amount
+  amount             Decimal       @db.Decimal(18, 2)
+  currency           String        @default("USD") @db.VarChar(10)
+
+  // Chain/token filtering (intersection with app-level config)
+  allowedChains      Json          @default("\"ALL\"")
+  allowedTokens      Json          @default("\"ALL\"")
+
+  // Flow control
+  captureMode        CaptureMode   @default(AUTOMATIC)
+  timelockDuration   Int           @default(604800) // Settlement duration in seconds
+  disputeStartDuration Int        @default(86400)  // Dispute start delay in seconds
+
+  // Status: follows authorize → capture → settle flow
+  status             PaymentStatus @default(CREATED)
+
+  // Authorization details (customer approved our contract)
+  authorizationMethod   AuthorizationMethod?
+  authorizationChainId  Int?
+  authorizationTokenKey String?     // e.g. "USDC-1"
+  authorizationWalletAddress String?
+  authorizationTxHash   String?     @db.VarChar(128)
+  authorizationSignature String?    @db.Text // For permit: the signed permit data
+  authorizedAt          DateTime?
+
+  // Crypto amount resolved at authorization time
+  cryptoAmount          String?       // raw integer string in token's smallest unit (e.g. "10000000" = 10 USDC)
+  cryptoTokenKey        String?       @db.VarChar(50)
+  cryptoTokenDecimals   Int?          // token decimals at authorization time (e.g. 6 for USDC)
+  exchangeRate          Decimal?      @db.Decimal(30, 18)
+
+  // Capture details (funds pulled)
+  captureTxHash      String?       @db.VarChar(128)
+  capturedAt         DateTime?
+  captureAttempts    Int           @default(0)
+  timelockEndsAt     DateTime?
+
+  // Settlement details
+  settledAt          DateTime?
+
+  // Refund details
+  refundedAt         DateTime?
+  refundTxHash       String?       @db.VarChar(128)
+  refundReason       String?       @db.VarChar(500)
+  /// Leftover escrow token units still in the contract for this payment (integer string).
+  settleAmount       String?
+
+  // Platform fee at capture time (bps; 200 = 2%)
+  platformFeeBps     Int?
+  conversionFeeBps   Int?
+  singleChainSettlementFeeBps Int?
+  bankSettlementFeeBps Int?
+  vasFeeBps          Int?
+  promisedSettlementAmount String?
+
+  // Settlement mode snapshot — frozen at authorize from SettlementConfig
+  conversionEnabled             Boolean  @default(false)
+  targetTokenKey                String?  @db.VarChar(50)
+  singleChainSettlementEnabled  Boolean  @default(false)
+  bankSettlementEnabled         Boolean  @default(false)
+  settlementChainId             Int?
+  settlementTokenKey            String?  @db.VarChar(50)
+  settlementWalletAddress       String?  @db.VarChar(66)
+  captureMerchantAddress        String?  @db.VarChar(66)
+  convertedAmount               String?
+  convertedTokenKey             String?  @db.VarChar(50)
+  swapQuoteMeta                 Json?
+  settlementCreditTxHash        String?  @db.VarChar(128)
+  bridgeTransferId              String?
+  settlementCreditedAt          DateTime?
+  bankSettlementId              String?
+  swapQuoteId                   String?
+  bridgeStatus                  String?       @db.VarChar(40)
+  bridgeLiFiStatus              String?       @db.VarChar(40)
+  bridgeLiFiSubstatus           String?       @db.VarChar(80)
+  settleBridgeRetryCount        Int           @default(0)
+  bridgeRetryAvailableAt        DateTime?
+  settlementCreditConsumed      Boolean       @default(false)
+  bridgeLastError               String?       @db.Text
+  bridgeLastStatusPayload       Json?
+  bridgeRetryMtxmTxId           String?       @db.VarChar(128)
+
+  // Expiry
+  expiresAt          DateTime?
+
+  // Source context — what created this payment intent
+  sourceType         PaymentSourceType?
+  sourceId           String?       // ID of checkout session, invoice, or subscription
+
+  // Redirect URLs
+  successUrl         String?
+  cancelUrl          String?
+
+  // Merchant metadata
+  metadata           Json          @default("{}")
+  idempotencyKey     String?       @db.VarChar(255)
+
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  app                App                @relation(fields: [appId], references: [id], onDelete: Cascade)
+  customerAccount    CustomerAccount?   @relation(fields: [customerAccountId], references: [id], onDelete: SetNull)
+  transactions       Transaction[]
+  dispute            Dispute?
+  webhookDeliveries  WebhookDelivery[]
+  emailDeliveries    EmailDelivery[]
+  invoices           Invoice[]
+  checkoutSessions   CheckoutSession[]
+  bankSettlement     BankSettlement?    @relation(fields: [bankSettlementId], references: [id], onDelete: SetNull)
+  refunds            PaymentRefund[]
+
+  @@unique([appId, idempotencyKey])
+  @@index([appId])
+  @@index([customerAccountId])
+  @@index([externalId])
+  @@index([status])
+  @@index([sourceType, sourceId])
+  @@index([createdAt])
+  @@index([bankSettlementId])
+  @@map("payment_intents")
+}
+
+model Transaction {
+  id              String            @id @default(uuid())
+  paymentIntentId String?
+  payoutIntentId  String?
+
+  /// MTXM internal transaction ID — always available from sendTransaction response
+  mtxmTxId        String?           @unique
+  /// On-chain transaction hash — only set once MTXM broadcasts
+  txHash          String?           @unique
+  chain           String
+  type            TransactionType
+  status          TransactionStatus @default(PENDING)
+
+  blockNumber     Int?
+  gasUsed         String?           // raw integer string
+  error           String?
+
+  createdAt       DateTime          @default(now())
+  confirmedAt     DateTime?
+
+  paymentIntent   PaymentIntent?    @relation(fields: [paymentIntentId], references: [id], onDelete: SetNull)
+  payoutIntent    PayoutIntent?     @relation(fields: [payoutIntentId], references: [id], onDelete: SetNull)
+  paymentRefund   PaymentRefund?
+
+  @@index([paymentIntentId])
+  @@index([payoutIntentId])
+  @@index([txHash])
+  @@index([status])
+  @@map("transactions")
+}
+
+/// One in-flight refund: pendingLock is the paymentIntentId while PENDING, then cleared.
+model PaymentRefund {
+  id              String            @id @default(uuid())
+  paymentIntentId String
+  /// Integer string of escrow token units refunded in this attempt
+  amount          String
+  reason          String?           @db.VarChar(500)
+  transactionId   String?           @unique
+  status          TransactionStatus @default(PENDING)
+  /// Set to paymentIntentId while PENDING so only one in-flight refund can exist.
+  pendingLock     String?           @unique
+  createdAt       DateTime          @default(now())
+  confirmedAt     DateTime?
+
+  paymentIntent   PaymentIntent     @relation(fields: [paymentIntentId], references: [id], onDelete: Cascade)
+  transaction     Transaction?      @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+
+  @@index([paymentIntentId])
+  @@index([status])
+  @@map("payment_refunds")
+}
+
+// ============================================================================
+// CHECKOUT SESSIONS
+// ============================================================================
+
+/// Ephemeral checkout session — wraps a payment intent with redirect URLs and line items
+model CheckoutSession {
+  id                String    @id @default(uuid())
+  appId             String
+  customerAccountId String?
+  paymentIntentId   String?
+
+  /// Mode determines what kind of payment
+  mode              CheckoutMode @default(PAYMENT)
+  status            CheckoutSessionStatus @default(OPEN)
+
+  /// What created this session (payment link, invoice, subscription, or direct API)
+  sourceType        PaymentSourceType?
+  sourceId          String?
+
+  /// Total fiat amount to charge
+  amount            Decimal?  @db.Decimal(18, 2)
+  currency          String    @default("USD") @db.VarChar(10)
+
+  /// Tax breakdown (computed at creation from source's tax rate)
+  subtotal          Decimal?  @db.Decimal(18, 2)
+  taxAmount         Decimal?  @db.Decimal(18, 2)
+  taxDescription    String?   @db.VarChar(200)
+
+  /// Chain/token filtering (resolved from source at creation time)
+  allowedChains     Json      @default("\"ALL\"")
+  allowedTokens     Json      @default("\"ALL\"")
+
+  successUrl        String?   @db.Text
+  cancelUrl         String?   @db.Text
+  expiresAt         DateTime
+
+  /// The price the customer actually selected (set when they choose on checkout page)
+  selectedPriceId   String?
+
+  /// Whether billing details (name, address, country) are required at checkout
+  requireBillingDetails Boolean @default(false)
+
+  metadata          Json      @default("{}")
+  completedAt       DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  app               App              @relation(fields: [appId], references: [id], onDelete: Cascade)
+  customerAccount   CustomerAccount? @relation(fields: [customerAccountId], references: [id], onDelete: SetNull)
+  paymentIntent     PaymentIntent?   @relation(fields: [paymentIntentId], references: [id], onDelete: SetNull)
+  items             CheckoutSessionItem[]
+
+  @@index([appId])
+  @@index([status])
+  @@index([sourceType, sourceId])
+  @@map("checkout_sessions")
+}
+
+/// Line items for checkout session — supports free-form items and product plan references
+model CheckoutSessionItem {
+  id                  String    @id @default(uuid())
+  checkoutSessionId   String
+  productPlanId       String?
+  productPlanPriceId  String?
+
+  /// Free-form name (always required, auto-filled from product plan if referenced)
+  name                String    @db.VarChar(255)
+  description         String?   @db.VarChar(500)
+  /// For free-form items (no product plan), amount is here. Otherwise from price.
+  amount              Decimal?  @db.Decimal(18, 2)
+  currency            String    @default("USD") @db.VarChar(10)
+  quantity            Int       @default(1)
+
+  /// Is this an alternate price option (for toggle UI)?
+  isPriceOption       Boolean   @default(false)
+
+  createdAt           DateTime  @default(now())
+
+  checkoutSession     CheckoutSession   @relation(fields: [checkoutSessionId], references: [id], onDelete: Cascade)
+  productPlan         ProductPlan?      @relation(fields: [productPlanId], references: [id], onDelete: SetNull)
+  productPlanPrice    ProductPlanPrice? @relation(fields: [productPlanPriceId], references: [id], onDelete: SetNull)
+
+  @@index([checkoutSessionId])
+  @@map("checkout_session_items")
+}
+
+model SwapQuote {
+  id                 String    @id @default(uuid())
+  checkoutSessionId  String?
+  asset              String    @db.VarChar(50)
+  dstAsset           String    @db.VarChar(50)
+  cryptoAmount       String
+  minAmountOut       String
+  expiresAt          DateTime
+  consumedAt         DateTime?
+  createdAt          DateTime  @default(now())
+
+  @@index([checkoutSessionId])
+  @@index([expiresAt])
+  @@map("swap_quotes")
+}
+
+// ============================================================================
+// DISPUTES
+// ============================================================================
+
+model Dispute {
+  id              String        @id @default(uuid())
+  paymentIntentId String        @unique
+
+  reason          String
+  evidence        String?       @db.Text
+
+  // Proof files (S3 object keys)
+  customerProofKey  String?     // Key for customer-uploaded PDF proof
+  merchantResponse  String?     @db.Text  // Written response from merchant
+  merchantProofKey  String?     // Key for merchant-uploaded PDF proof
+
+  status          DisputeStatus @default(OPEN)
+  resolvedBy      String?       // Admin wallet that resolved
+
+  deadline        DateTime
+  createdAt       DateTime      @default(now())
+  resolvedAt      DateTime?
+
+  paymentIntent   PaymentIntent @relation(fields: [paymentIntentId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@map("disputes")
+}
+
+// ============================================================================
+// PAYOUTS
+// ============================================================================
+
+model PayoutIntent {
+  id              String       @id @default(uuid())
+  merchantId      String
+  appId           String
+
+  recipientWallet String       @db.VarChar(66)
+  /// Optional receipt email for single-recipient payouts (bulk emails live on lines JSON).
+  recipientEmail  String?
+  /// Snapshot of app.payoutWallet at payout creation time — ensures wallet changes
+  /// after payout creation don't affect which wallet signs the session.
+  merchantWallet  String       @db.VarChar(66)
+  amountUsd       Decimal      @db.Decimal(18, 8)
+  /// Atomic integer string (token smallest unit). Same pattern as PaymentIntent.cryptoAmount.
+  /// DECIMAL(36,18) overflows 18-decimal tokens: 1 token = 1e18 (19 digits).
+  tokenAmount     String
+  tokenAddress    String       @db.VarChar(128)
+  chain           String
+
+  nonce           String       @unique // bytes32 for replay protection
+  sessionSignature String?
+  sessionExpiry   DateTime?
+  /// EVM bulk lines: [{ recipient, amount, email? }]. Single payouts leave this null.
+  /// Amounts are atomic integer strings.
+  lines           Json?
+
+  scheduledAt     DateTime?
+  scheduleId      String?
+  pendingJobId    String?
+
+  status          PayoutStatus @default(PENDING)
+  txHash          String?
+  error           String?
+
+  createdAt       DateTime     @default(now())
+  executedAt      DateTime?
+
+  merchant        Merchant     @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  app             App          @relation(fields: [appId], references: [id], onDelete: Cascade)
+  schedule        PayoutSchedule? @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
+  transactions    Transaction[]
+  emailDeliveries EmailDelivery[]
+
+  @@index([merchantId])
+  @@index([appId])
+  @@index([status])
+  @@index([scheduleId])
+  @@map("payout_intents")
+}
+
+enum PayoutScheduleStatus {
+  ACTIVE
+  PAUSED
+  CANCELLED
+}
+
+/// Recurring payout template. Each fire creates a child PayoutIntent.
+model PayoutSchedule {
+  id            String               @id @default(uuid())
+  merchantId    String
+  appId         String
+  chain         String
+  tokenAddress  String               @db.VarChar(128)
+  /// [{ recipient, amount }] amounts are atomic integer strings
+  lines         Json
+  intervalDays  Int
+  nextRunAt     DateTime
+  status        PayoutScheduleStatus @default(ACTIVE)
+  pendingJobId  String?
+  lastError     String?
+
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+
+  merchant      Merchant             @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  app           App                  @relation(fields: [appId], references: [id], onDelete: Cascade)
+  payouts       PayoutIntent[]
+
+  @@index([merchantId])
+  @@index([appId])
+  @@index([status])
+  @@index([nextRunAt])
+  @@map("payout_schedules")
+}
+
+/// Saved payout recipient for an app (TEST and PRODUCTION stay separate).
+model PayoutContact {
+  id         String    @id @default(uuid())
+  merchantId String
+  appId      String
+  label      String    @db.VarChar(80)
+  wallet     String    @db.VarChar(128)
+  family     ChainType
+  email      String?
+
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  merchant   Merchant  @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  app        App       @relation(fields: [appId], references: [id], onDelete: Cascade)
+
+  @@unique([appId, family, wallet])
+  @@index([appId])
+  @@index([merchantId])
+  @@map("payout_contacts")
+}
+
+// ============================================================================
+// WALLET CHANGE LOG — Audit trail for wallet address changes
+// ============================================================================
+
+/// Immutable log of every wallet address change on an app.
+/// Ensures traceability: old wallet stays on record even after overwrite.
+model WalletChangeLog {
+  id              String    @id @default(uuid())
+  appId           String
+  walletType      WalletType // RECEIVING or PAYOUT
+  previousAddress String?   @db.VarChar(66)
+  newAddress      String    @db.VarChar(66)
+  signature       String?   @db.Text // ownership proof signature
+  changedBy       String    // merchantId who made the change
+  /// Count of in-flight (non-terminal) payment intents at time of change
+  inFlightPayments Int      @default(0)
+  /// Count of pending payout intents at time of change
+  pendingPayouts  Int       @default(0)
+  createdAt       DateTime  @default(now())
+
+  app             App       @relation(fields: [appId], references: [id], onDelete: Cascade)
+
+  @@index([appId])
+  @@index([walletType])
+  @@index([createdAt])
+  @@map("wallet_change_logs")
+}
+
+// ============================================================================
+// WEBHOOKS
+// ============================================================================
+
+model Webhook {
+  id        String   @id @default(uuid())
+  appId     String
+
+  url       String
+  secret    String   // For signing payloads
+  events    Json     // Array of event types to subscribe to
+  active    Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  app       App      @relation(fields: [appId], references: [id], onDelete: Cascade)
+  deliveries WebhookDelivery[]
+
+  @@index([appId])
+  @@map("webhooks")
+}
+
+model WebhookDelivery {
+  id              String                @id @default(uuid())
+  webhookId       String
+  paymentIntentId String?
+
+  event           String
+  payload         Json
+  responseStatus  Int?
+  responseBody    String?               @db.Text
+  attempts        Int                   @default(0)
+  status          WebhookDeliveryStatus @default(PENDING)
+
+  nextRetryAt     DateTime?
+  createdAt       DateTime              @default(now())
+  deliveredAt     DateTime?
+
+  webhook         Webhook               @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+  paymentIntent   PaymentIntent?        @relation(fields: [paymentIntentId], references: [id], onDelete: SetNull)
+
+  @@index([webhookId])
+  @@index([status])
+  @@index([nextRetryAt])
+  @@map("webhook_deliveries")
+}
+
+// ============================================================================
+// INVOICES
+// ============================================================================
+
+model Invoice {
+  id                String    @id @default(uuid())
+  appId             String
+  customerAccountId String
+  subscriptionId    String?
+  paymentIntentId   String?
+
+  /// Invoice number (merchant-facing, sequential per app)
+  invoiceNumber     String    @db.VarChar(50)
+
+  status            InvoiceStatus @default(DRAFT)
+
+  // Amounts
+  subtotal          Decimal   @default(0) @db.Decimal(18, 2)
+  taxAmount         Decimal   @default(0) @db.Decimal(18, 2)
+  total             Decimal   @default(0) @db.Decimal(18, 2)
+  currency          String    @default("USD") @db.VarChar(10)
+
+  /// Default tax rate applied to this invoice
+  taxRateId         String?
+
+  // Dates
+  dueDate           DateTime?
+  paidAt            DateTime?
+  voidedAt          DateTime?
+
+  // Billing period (for subscription invoices)
+  periodStart       DateTime?
+  periodEnd         DateTime?
+
+  // Payment config
+  allowedChains     Json      @default("\"ALL\"")
+  allowedTokens     Json      @default("\"ALL\"")
+
+  memo              String?   @db.Text
+  metadata          Json      @default("{}")
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  app               App              @relation(fields: [appId], references: [id], onDelete: Cascade)
+  customerAccount   CustomerAccount  @relation(fields: [customerAccountId], references: [id])
+  subscription      Subscription?    @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  paymentIntent     PaymentIntent?   @relation(fields: [paymentIntentId], references: [id], onDelete: SetNull)
+  taxRate           TaxRate?         @relation(fields: [taxRateId], references: [id], onDelete: SetNull)
+  items             InvoiceItem[]
+  emailDeliveries   EmailDelivery[]
+
+  @@unique([appId, invoiceNumber])
+  @@index([appId])
+  @@index([customerAccountId])
+  @@index([subscriptionId])
+  @@index([taxRateId])
+  @@index([status])
+  @@map("invoices")
+}
+
+/// Invoice line items — can reference product plans or be free-form
+model InvoiceItem {
+  id                  String    @id @default(uuid())
+  invoiceId           String
+  productPlanId       String?
+  productPlanPriceId  String?
+  taxRateId           String?
+
+  description         String    @db.VarChar(500)
+  amount              Decimal   @db.Decimal(18, 2)
+  currency            String    @default("USD") @db.VarChar(10)
+  quantity            Int       @default(1)
+
+  /// Computed tax amount for this line item
+  taxAmount           Decimal   @default(0) @db.Decimal(18, 2)
+
+  createdAt           DateTime  @default(now())
+
+  invoice             Invoice           @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  productPlan         ProductPlan?      @relation(fields: [productPlanId], references: [id], onDelete: SetNull)
+  productPlanPrice    ProductPlanPrice? @relation(fields: [productPlanPriceId], references: [id], onDelete: SetNull)
+  taxRate             TaxRate?          @relation(fields: [taxRateId], references: [id], onDelete: SetNull)
+
+  @@index([invoiceId])
+  @@map("invoice_items")
+}
+
+// ============================================================================
+// SUBSCRIPTIONS
+// ============================================================================
+
+model Subscription {
+  id                String    @id @default(uuid())
+  appId             String
+  customerAccountId String
+  productPlanId     String
+  productPlanPriceId String
+
+  status            SubscriptionStatus @default(CREATED)
+
+  // The wallet + chain used for recurring pulls
+  customerWalletId  String?
+  authorizationMethod AuthorizationMethod?
+  authorizationChainId Int?
+  authorizationTokenKey String?
+
+  // Permit/approval details for recurring capture
+  permitSignature   String?   @db.Text
+  permitDeadline    DateTime?
+  permitNonce       String?   // raw integer string (uint256)
+  /// Approved allowance amount (max amount we can pull)
+  approvedAllowance String?   // raw integer string (uint256)
+
+  // Billing cycle tracking
+  currentPeriodStart DateTime?
+  currentPeriodEnd   DateTime?
+  billingCycleAnchor DateTime?
+
+  // Trial
+  trialStart        DateTime?
+  trialEnd          DateTime?
+
+  // Cancel
+  cancelAt          DateTime?
+  cancelledAt       DateTime?
+  cancelAtPeriodEnd Boolean   @default(false)
+
+  // Pause tracking
+  pausedAt          DateTime?
+
+  // Past due handling
+  pastDueSince      DateTime?
+  captureRetryCount Int       @default(0)
+  maxCaptureRetries Int       @default(3)
+
+  /// BullMQ delayed job ID for next charge/retry/grace-period job
+  pendingJobId      String?
+
+  // Payment config
+  allowedChains     Json      @default("\"ALL\"")
+  allowedTokens     Json      @default("\"ALL\"")
+
+  metadata          Json      @default("{}")
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  app               App                @relation(fields: [appId], references: [id], onDelete: Cascade)
+  customerAccount   CustomerAccount    @relation(fields: [customerAccountId], references: [id])
+  productPlan       ProductPlan        @relation(fields: [productPlanId], references: [id])
+  productPlanPrice  ProductPlanPrice   @relation(fields: [productPlanPriceId], references: [id])
+  customerWallet    CustomerWallet?    @relation(fields: [customerWalletId], references: [id], onDelete: SetNull)
+  invoices          Invoice[]
+
+  @@index([appId])
+  @@index([customerAccountId])
+  @@index([productPlanId])
+  @@index([status])
+  @@map("subscriptions")
+}
+
+// ============================================================================
+// SETTLEMENT
+// ============================================================================
+
+/// Settlement preferences per merchant app. Live values apply to new authorizations only.
+model SettlementConfig {
+  id                     String    @id @default(uuid())
+  appId                  String    @unique
+
+  /// Preferred settlement token key (e.g. USDC-1)
+  preferredTokenKey      String?   @db.VarChar(50)
+  /// Preferred settlement chain ID
+  preferredChainId       Int?
+  /// Settlement wallet address (can differ from receiving address)
+  settlementAddress      String?   @db.VarChar(42)
+  /// Auto-settle or manual
+  autoSettle             Boolean   @default(false)
+  /// Minimum amount to trigger settlement
+  minSettlementAmount    Decimal?  @db.Decimal(18, 2)
+  settlementCurrency     String    @default("USD") @db.VarChar(10)
+  isEnabled              Boolean   @default(false)
+
+  conversionEnabled            Boolean  @default(false)
+  targetTokenKey               String?  @db.VarChar(50)
+  singleChainSettlementEnabled Boolean  @default(false)
+  settlementChainId            Int?
+  settlementTokenKey           String?  @db.VarChar(50)
+  settlementWalletAddress      String?  @db.VarChar(66)
+  bankSettlementEnabled        Boolean  @default(false)
+  bankPayoutCurrency           String?  @db.VarChar(10)
+  bloxfiBeneficiaryId          String?
+  bloxfiCountry                String?  @db.VarChar(8)
+  bloxfiDestinationType        String?  @db.VarChar(50)
+  bloxfiBeneficiaryType        String?  @db.VarChar(50)
+  /// Merchant personal_sign authorizing bank/withdraw from settlement balance (typically 1 year).
+  bankSettlementAuthSignature  String?  @db.Text
+  bankSettlementAuthValidUntil DateTime?
+
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  app                    App       @relation(fields: [appId], references: [id], onDelete: Cascade)
+
+  @@map("settlement_configs")
+}
+
+model BankSettlement {
+  id                  String               @id @default(uuid())
+  appId               String
+  bloxfiTransferId    String?              @unique
+  clientReferenceId   String               @unique
+  depositAddress      String?              @db.VarChar(42)
+  tokenKey            String               @db.VarChar(50)
+  chainId             Int
+  amount              String
+  payoutCurrency      String               @db.VarChar(10)
+  status              BankSettlementStatus @default(QUOTED)
+  bloxfiRateToken     String?
+  webhookEventId      String?              @unique
+  merchantSignature   String?              @db.Text
+  sessionExpiry       DateTime?
+  onChainTxHash       String?              @db.VarChar(128)
+  failureReason       String?              @db.Text
+  metadata            Json                 @default("{}")
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+
+  app                 App                  @relation(fields: [appId], references: [id], onDelete: Cascade)
+  paymentIntents      PaymentIntent[]
+
+  @@index([appId])
+  @@index([status])
+  @@map("bank_settlements")
+}
+
+// ============================================================================
+// FIAT — own-account onboarding + global bank accounts (Bridge VAs internally)
+// ============================================================================
+
+model FiatProfile {
+  id                     String               @id @default(uuid())
+  merchantId             String
+  environment            Environment
+  accountType            FiatAccountType      @default(INDIVIDUAL)
+  ownAccountStatus       FiatOwnAccountStatus @default(NONE)
+  vaKycStatus            FiatVaKycStatus      @default(NONE)
+  vaProvider             String?              @db.VarChar(40)
+  vaExternalRefs         Json                 @default("{}")
+  identityProvider       String?              @db.VarChar(40)
+  identityExternalRefs   Json                 @default("{}")
+  createdAt              DateTime             @default(now())
+  updatedAt              DateTime             @updatedAt
+
+  merchant               Merchant             @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  ownAccount             FiatOwnAccount?
+  identitySessions       FiatIdentitySession[]
+  onboardingFees         FiatOnboardingFee[]
+  virtualAccounts        FiatVirtualAccount[]
+
+  @@unique([merchantId, environment])
+  @@index([merchantId])
+  @@map("fiat_profiles")
+}
+
+model FiatOwnAccount {
+  id                    String                     @id @default(uuid())
+  profileId             String                     @unique
+  corridor              Json                       @default("{}")
+  statementS3Key        String?
+  pendingCorridor       Json                       @default("{}")
+  pendingStatementS3Key String?
+  pendingSubmittedAt    DateTime?
+  changeStatus          FiatOwnAccountChangeStatus @default(NONE)
+  changeRejectionReason String?                    @db.Text
+  offrampBeneficiaryId  String?
+  reviewNote            String?                    @db.Text
+  rejectionReason       String?                    @db.Text
+  submittedAt           DateTime?
+  reviewedAt            DateTime?
+  createdAt             DateTime                   @default(now())
+  updatedAt             DateTime                   @updatedAt
+
+  profile               FiatProfile                @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@map("fiat_own_accounts")
+}
+
+model FiatIdentitySession {
+  id          String           @id @default(uuid())
+  profileId   String
+  provider    String           @db.VarChar(40)
+  kind        FiatIdentityKind
+  environment Environment
+  externalId  String
+  status      String           @db.VarChar(40)
+  vendorData  String?
+  sessionUrl  String?          @db.Text
+  lastEventId String?
+  providerPayload Json         @default("{}")
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  profile     FiatProfile      @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, externalId])
+  @@index([profileId])
+  @@map("fiat_identity_sessions")
+}
+
+model FiatOnboardingFee {
+  id                String         @id @default(uuid())
+  profileId         String
+  rail              String         @db.VarChar(16)
+  amountUsd         Decimal        @db.Decimal(10, 2)
+  status            FiatFeeStatus  @default(PENDING)
+  checkoutSessionId String?
+  checkoutUrl       String?        @db.Text
+  paymentIntentId   String?        @unique
+  periodStart       DateTime?
+  periodEnd         DateTime?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  profile           FiatProfile    @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  virtualAccount    FiatVirtualAccount?
+
+  @@index([profileId, rail, status])
+  @@map("fiat_onboarding_fees")
+}
+
+model FiatVirtualAccount {
+  id                   String                   @id @default(uuid())
+  profileId            String
+  feeId                String?                  @unique
+  provider             String                   @db.VarChar(40)
+  environment          Environment
+  rail                 String                   @db.VarChar(16)
+  externalCustomerId   String?
+  externalAccountId    String?
+  depositInstructions  Json                     @default("{}")
+  destinationAddress   String?                  @db.VarChar(128)
+  destinationChainId   Int?
+  destinationTokenKey  String?                  @db.VarChar(50)
+  destinationSignature String?                  @db.Text
+  status               String                   @db.VarChar(40) @default("ACTIVE")
+  createdAt            DateTime                 @default(now())
+  updatedAt            DateTime                 @updatedAt
+
+  profile              FiatProfile              @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  fee                  FiatOnboardingFee?       @relation(fields: [feeId], references: [id], onDelete: SetNull)
+  events               FiatVirtualAccountEvent[]
+
+  @@unique([profileId, rail])
+  @@index([profileId])
+  @@map("fiat_virtual_accounts")
+}
+
+model FiatVirtualAccountEvent {
+  id                 String             @id @default(uuid())
+  virtualAccountId   String
+  externalEventId    String             @unique
+  depositId          String?
+  type               String             @db.VarChar(40)
+  amount             String?
+  currency           String?            @db.VarChar(16)
+  paymentRail        String?            @db.VarChar(40)
+  senderName         String?
+  senderReference    String?
+  senderLast4        String?
+  developerFee       String?
+  exchangeFee        String?
+  gasFee             String?
+  subtotal           String?
+  destinationTxHash  String?
+  receipt            Json?
+  source             Json?
+  createdAt          DateTime           @default(now())
+
+  virtualAccount     FiatVirtualAccount @relation(fields: [virtualAccountId], references: [id], onDelete: Cascade)
+
+  @@index([virtualAccountId, depositId])
+  @@map("fiat_virtual_account_events")
+}
+
+model FiatProcessedWebhook {
+  id        String   @id
+  source    String   @db.VarChar(40)
+  createdAt DateTime @default(now())
+
+  @@map("fiat_processed_webhooks")
+}
+
+/// Settlement records
+model Settlement {
+  id                  String    @id @default(uuid())
+  appId               String
+
+  status              SettlementStatus @default(PENDING)
+
+  /// Source: what payments are being settled (array of payment intent IDs)
+  paymentIntentIds    Json      @default("[]")
+
+  // Amounts
+  sourceTotalFiat     Decimal   @db.Decimal(18, 2)
+  sourceCurrency      String    @default("USD") @db.VarChar(10)
+
+  // Settlement output
+  settlementTokenKey  String?   @db.VarChar(50)
+  settlementChainId   Int?
+  settlementAmount    String?   // raw integer string in token's smallest unit
+  settlementAddress   String    @db.VarChar(42)
+  settlementTxHash    String?   @db.VarChar(66)
+  settledAt           DateTime?
+
+  metadata            Json      @default("{}")
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@index([appId])
+  @@index([status])
+  @@map("settlements")
+}
+
+// ============================================================================
+// PAYMENT LINKS
+// ============================================================================
+
+/// Reusable payment links — shareable URLs that create checkout sessions on visit
+model PaymentLink {
+  id              String    @id @default(uuid())
+  appId           String
+
+  /// Merchant-facing name for this link
+  name            String    @db.VarChar(255)
+  description     String?   @db.Text
+
+  /// Link slug for public URL (e.g. /pay/my-product)
+  slug            String    @unique @db.VarChar(100)
+
+  /// Fixed amount or leave null for customer-chooses-amount
+  amount          Decimal?  @db.Decimal(18, 2)
+  currency        String    @default("USD") @db.VarChar(10)
+
+  /// Optional: link to a product plan and specific price
+  productPlanId      String?
+  productPlanPriceId String?
+
+  /// Optional: tax rate to apply at checkout
+  taxRateId          String?
+
+  /// Payment config (intersection with app-level)
+  allowedChains   Json      @default("\"ALL\"")
+  allowedTokens   Json      @default("\"ALL\"")
+
+  /// Redirect after payment
+  successUrl      String?   @db.Text
+  cancelUrl       String?   @db.Text
+
+  /// Require billing details (name, address, city, state, country, postal code) at checkout
+  requireBillingDetails Boolean @default(false)
+
+  /// Optional display image for the payment link (S3 object key)
+  imageKey        String?   @db.VarChar(500)
+
+  /// Is this link active and accepting payments?
+  isActive        Boolean   @default(true)
+
+  /// How many times this link has been used
+  usageCount      Int       @default(0)
+
+  metadata        Json      @default("{}")
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  app             App       @relation(fields: [appId], references: [id], onDelete: Cascade)
+  productPlan     ProductPlan?      @relation(fields: [productPlanId], references: [id], onDelete: SetNull)
+  productPlanPrice ProductPlanPrice? @relation(fields: [productPlanPriceId], references: [id], onDelete: SetNull)
+  taxRate         TaxRate?          @relation(fields: [taxRateId], references: [id], onDelete: SetNull)
+
+  @@index([appId])
+  @@index([slug])
+  @@index([productPlanId])
+  @@map("payment_links")
+}
+
+// ============================================================================
+// CONTRACT DEPLOYMENTS
+// ============================================================================
+
+model ContractDeployment {
+  id              String   @id @default(uuid())
+  chain           String
+  chainId         Int
+
+  escrowAddress   String
+  merchantManagerAddress String
+
+  deployedAt      DateTime @default(now())
+  deployTxHash    String?
+
+  createdAt       DateTime @default(now())
+
+  @@unique([chain])
+  @@map("contract_deployments")
+}
+
+// ============================================================================
+// LANDING FEEDBACK
+// ============================================================================
+
+/// Public feedback submitted from landing surfaces (feature requests, chain requests, general feedback)
+model FeedbackSubmission {
+  id          String         @id @default(uuid())
+  type        FeedbackType
+  email       String         @db.VarChar(254)
+  message     String         @db.VarChar(2000)
+  source      String?        @db.VarChar(100)
+  status      FeedbackStatus @default(NEW)
+  reviewedBy  String?        @db.VarChar(255)
+  reviewedAt  DateTime?
+
+  /// Privacy-safe metadata for abuse detection
+  ipHash      String?        @db.VarChar(64)
+  userAgent   String?        @db.VarChar(500)
+
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@index([status])
+  @@index([type])
+  @@index([createdAt])
+  @@map("feedback_submissions")
+}
+
+// ============================================================================
+// SHORT LINKS (admin redirect / lead capture)
+// ============================================================================
+
+enum ShortLinkStatus {
+  ACTIVE
+  DISABLED
+}
+
+/// Branded short link at example.local/link/{slug}
+model ShortLink {
+  id             String          @id @default(uuid())
+  slug           String          @unique @db.VarChar(64)
+  destinationUrl String          @db.VarChar(2048)
+  title          String?         @db.VarChar(200)
+  status         ShortLinkStatus @default(ACTIVE)
+  collectEmail   Boolean         @default(false)
+  /// bcrypt hash when visitors must enter a password; null = no password gate
+  passwordHash   String?
+  clickCount     Int             @default(0)
+  leadCount      Int             @default(0)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  clicks ShortLinkClick[]
+  leads  ShortLinkLead[]
+
+  @@index([status])
+  @@index([createdAt])
+  @@map("short_links")
+}
+
+model ShortLinkClick {
+  id          String   @id @default(uuid())
+  shortLinkId String
+  referrer    String?  @db.VarChar(500)
+  userAgent   String?  @db.VarChar(500)
+  ipHash      String?  @db.VarChar(64)
+  createdAt   DateTime @default(now())
+
+  shortLink ShortLink @relation(fields: [shortLinkId], references: [id], onDelete: Cascade)
+
+  @@index([shortLinkId, createdAt])
+  @@map("short_link_clicks")
+}
+
+model ShortLinkLead {
+  id          String   @id @default(uuid())
+  shortLinkId String
+  email       String   @db.VarChar(254)
+  createdAt   DateTime @default(now())
+
+  shortLink ShortLink @relation(fields: [shortLinkId], references: [id], onDelete: Cascade)
+
+  @@unique([shortLinkId, email])
+  @@index([shortLinkId, createdAt])
+  @@map("short_link_leads")
+}
+
+// ============================================================================
+// ENUMS
+// ============================================================================
+
+enum MerchantRole {
+  MERCHANT
+  ADMIN
+}
+
+enum MerchantType {
+  BUSINESS
+  INDIVIDUAL
+}
+
+// TeamRole enum removed — replaced by granular permissions string array on TeamMember
+
+enum Environment {
+  TEST
+  PRODUCTION
+}
+
+enum FiatAccountType {
+  INDIVIDUAL
+  BUSINESS
+}
+
+enum FiatOwnAccountStatus {
+  NONE
+  PENDING_IDENTITY
+  PENDING_REVIEW
+  VERIFIED
+  REJECTED
+}
+
+enum FiatOwnAccountChangeStatus {
+  NONE
+  PENDING_REVIEW
+  REJECTED
+}
+
+enum FiatVaKycStatus {
+  NONE
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum FiatIdentityKind {
+  KYC
+  KYB
+}
+
+enum FiatFeeStatus {
+  PENDING
+  CONFIRMED
+  EXPIRED
+  FAILED
+}
+
+enum ApiKeyType {
+  PUBLIC    // pk_* - for client-side
+  SECRET    // sk_* - for server-side
+}
+
+enum PlanType {
+  ONE_TIME
+  SUBSCRIPTION
+}
+
+enum BillingInterval {
+  MINUTE
+  DAY
+  WEEK
+  MONTH
+  YEAR
+}
+
+enum PaymentStatus {
+  CREATED         // Payment intent created, awaiting authorization
+  AUTHORIZED      // Payer has signed permit/approval
+  CAPTURING       // Capture transaction submitted
+  CAPTURED        // Funds captured in escrow
+  PARTIALLY_REFUNDED // Some leftover remains in escrow after a partial refund
+  SETTLED         // Funds settled to merchant
+  DISPUTED        // Under dispute
+  DISPUTE_RESOLVED
+  DISPUTE_LOST
+  REFUNDED        // Refunded to payer
+  CANCELLED       // Cancelled before capture
+  EXPIRED         // Expired without payment
+  CAPTURE_FAILED  // Capture transaction failed
+  PAST_DUE        // Capture failed, awaiting retry
+}
+
+enum CaptureMode {
+  AUTOMATIC   // Capture immediately after authorization
+  MANUAL      // Wait for merchant to trigger capture
+}
+
+enum AuthorizationMethod {
+  NATIVE      // Standard approve + transferFrom
+  PERMIT      // EIP-2612 permit signature (gasless)
+  EIP7702     // EIP-7702 delegation
+}
+
+enum CheckoutMode {
+  PAYMENT       // One-time payment
+  SUBSCRIPTION  // Recurring subscription
+}
+
+enum CheckoutSessionStatus {
+  OPEN
+  COMPLETE
+  EXPIRED
+}
+
+enum PaymentSourceType {
+  CHECKOUT_SESSION
+  PAYMENT_LINK
+  INVOICE
+  SUBSCRIPTION
+  API
+}
+
+enum TransactionType {
+  AUTHORIZE
+  CAPTURE
+  SETTLE
+  DISPUTE_INITIATE  // On-chain initiateDispute() call
+  DISPUTE           // On-chain resolveDispute() call
+  REFUND
+  PAYOUT
+  BRIDGE
+  BANK_SETTLEMENT
+  SETTLEMENT_WITHDRAW
+}
+
+enum TransactionStatus {
+  PENDING
+  CONFIRMED
+  FAILED
+}
+
+enum DisputeStatus {
+  OPEN
+  RESOLVING       // Resolution tx submitted, awaiting on-chain confirmation
+  RESOLVED_MERCHANT
+  RESOLVED_PAYER
+}
+
+enum PayoutStatus {
+  PENDING
+  SCHEDULED
+  EXECUTED
+  FAILED
+  CANCELLED
+}
+
+enum WebhookDeliveryStatus {
+  PENDING
+  DELIVERED
+  FAILED
+}
+
+enum SubscriptionStatus {
+  CREATED
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  PAUSED
+  CANCELLED
+}
+
+enum InvoiceStatus {
+  DRAFT
+  OPEN
+  PAID
+  PAST_DUE
+  VOID
+  UNCOLLECTIBLE
+}
+
+enum SettlementStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum BankSettlementStatus {
+  QUOTED
+  DEPOSIT_PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  FUNDS_AT_DEPOSIT_FAILED
+}
+
+enum WalletType {
+  RECEIVING
+  PAYOUT
+}
+
+enum FeedbackType {
+  FEATURE_REQUEST
+  CHAIN_REQUEST
+  GENERAL_FEEDBACK
+}
+
+enum FeedbackStatus {
+  NEW
+  REVIEWED
+  CLOSED
+}
+
+// ============================================================================
+// EMAIL DELIVERIES
+// ============================================================================
+
+/// Tracks email delivery attempts for payment receipts and notifications
+model EmailDelivery {
+  id              String              @id @default(uuid())
+  paymentIntentId String?
+  invoiceId       String?
+  payoutIntentId  String?
+  templateId      String              @db.VarChar(100)
+  recipientEmail  String
+
+  status          EmailDeliveryStatus @default(PENDING)
+  attempts        Int                 @default(0)
+  lastError       String?             @db.Text
+
+  /// SES message ID on successful send
+  messageId       String?
+
+  /// Bounce / complaint metadata from SES notifications
+  bounceType      String?             @db.VarChar(50)
+  bounceSubType   String?             @db.VarChar(50)
+  complaintType   String?             @db.VarChar(100)
+  diagnosticCode  String?             @db.Text
+
+  sentAt          DateTime?
+  deliveredAt     DateTime?
+  bouncedAt       DateTime?
+  complainedAt    DateTime?
+  failedAt        DateTime?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  paymentIntent   PaymentIntent?      @relation(fields: [paymentIntentId], references: [id], onDelete: Cascade)
+  invoice         Invoice?            @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  payoutIntent    PayoutIntent?       @relation(fields: [payoutIntentId], references: [id], onDelete: Cascade)
+
+  @@unique([paymentIntentId, templateId])
+  @@index([paymentIntentId])
+  @@index([invoiceId])
+  @@index([payoutIntentId])
+  @@index([status])
+  @@index([messageId])
+  @@map("email_deliveries")
+}
+
+enum EmailDeliveryStatus {
+  PENDING
+  SENT
+  DELIVERED
+  BOUNCED
+  COMPLAINED
+  FAILED
+}
+
+/// Global email suppression list — prevents sending to addresses that
+/// have permanently bounced or filed spam complaints.
+model EmailSuppression {
+  id        String                  @id @default(uuid())
+  email     String                  @unique
+  reason    EmailSuppressionReason
+  detail    String?                 @db.Text
+  createdAt DateTime                @default(now())
+
+  @@map("email_suppressions")
+}
+
+enum EmailSuppressionReason {
+  PERMANENT_BOUNCE
+  COMPLAINT
+  CAMPAIGN_UNSUBSCRIBE
+}
+
+enum EmailListContactSource {
+  TYPED
+  CSV
+}
+
+enum EmailCampaignAudience {
+  EVERYONE
+  REGISTERED_ACCOUNTS
+  ADDED_CONTACTS
+  SELECTED_PEOPLE
+  BUCKETS
+}
+
+enum EmailCampaignStatus {
+  DRAFT
+  QUEUED
+  SENDING
+  CANCELLED
+  COMPLETED
+}
+
+enum EmailCampaignRecipientSource {
+  REGISTERED
+  ADDED
+  TEST
+}
+
+enum EmailCampaignRecipientStatus {
+  PENDING
+  SKIPPED
+  SENT
+  FAILED
+  CANCELLED
+}
+
+enum EmailCampaignTemplate {
+  UPDATES
+  BUSINESS_OUTREACH
+  DIRECT_OUTREACH
+  PARTNERSHIP
+  EVENT_INVITE
+  ANNOUNCEMENT
+  FOLLOW_UP
+}
+
+/// Extra campaign contacts added by admin (typed or CSV). Not merchants.
+model EmailListContact {
+  id                  String                 @id @default(uuid())
+  email               String                 @unique
+  name                String?                @db.VarChar(120)
+  source              EmailListContactSource
+  createdByAdminEmail String
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+
+  recipients          EmailCampaignRecipient[]
+
+  @@map("email_list_contacts")
+}
+
+model EmailCampaign {
+  id                  String                @id @default(uuid())
+  subject             String
+  heading             String
+  body                String                @db.Text
+  ctaLabel            String?
+  ctaUrl              String?
+  /// Structured buttons: [{ id, label, url, placement, style, align?, withArrow? }]
+  ctas                Json?
+  /// stack = one per row; row = side by side within a placement
+  ctaLayout           String                @default("stack") @db.VarChar(16)
+  showBackedBy        Boolean               @default(true)
+  signerName          String?
+  signerTitle         String?
+  fromAddress         String
+  templateId          EmailCampaignTemplate @default(UPDATES)
+  audience            EmailCampaignAudience
+  selectedPersonKeys  Json?
+  selectedBucketIds   Json?
+  status              EmailCampaignStatus   @default(DRAFT)
+  recipientCount      Int                   @default(0)
+  sentCount           Int                   @default(0)
+  skippedCount        Int                   @default(0)
+  failedCount         Int                   @default(0)
+  uniqueOpens         Int                   @default(0)
+  totalOpens          Int                   @default(0)
+  uniqueClicks        Int                   @default(0)
+  totalClicks         Int                   @default(0)
+  createdByAdminEmail String
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+  startedAt           DateTime?
+  completedAt         DateTime?
+
+  recipients          EmailCampaignRecipient[]
+  clicks              EmailCampaignClick[]
+
+  @@index([status])
+  @@index([createdAt])
+  @@map("email_campaigns")
+}
+
+model EmailCampaignRecipient {
+  id             String                       @id @default(uuid())
+  campaignId     String
+  email          String
+  displayName    String?
+  merchantId     String?
+  listContactId  String?
+  source         EmailCampaignRecipientSource
+  status         EmailCampaignRecipientStatus @default(PENDING)
+  openToken      String                       @unique
+  firstOpenedAt  DateTime?
+  lastOpenedAt   DateTime?
+  openCount      Int                          @default(0)
+  firstClickedAt DateTime?
+  lastClickedAt  DateTime?
+  clickCount     Int                          @default(0)
+  emailDeliveryId String?
+  lastError      String?                      @db.Text
+  createdAt      DateTime                     @default(now())
+  updatedAt      DateTime                     @updatedAt
+
+  campaign       EmailCampaign                @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  merchant       Merchant?                    @relation(fields: [merchantId], references: [id], onDelete: SetNull)
+  listContact    EmailListContact?            @relation(fields: [listContactId], references: [id], onDelete: SetNull)
+  clicks         EmailCampaignClick[]
+
+  @@unique([campaignId, email])
+  @@index([campaignId, status])
+  @@index([merchantId])
+  @@map("email_campaign_recipients")
+}
+
+model EmailCampaignClick {
+  id          String                 @id @default(uuid())
+  campaignId  String
+  recipientId String
+  email       String
+  url         String
+  ctaId       String?
+  ctaLabel    String?
+  createdAt   DateTime               @default(now())
+
+  campaign    EmailCampaign          @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  recipient   EmailCampaignRecipient @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId])
+  @@index([recipientId])
+  @@index([campaignId, ctaId])
+  @@map("email_campaign_clicks")
+}
+
+/// Admin-created tag for campaign people. Membership is email-based so
+/// registered merchants and added contacts share the same buckets.
+model EmailBucket {
+  id                  String              @id @default(uuid())
+  name                String              @db.VarChar(80)
+  slug                String              @unique @db.VarChar(80)
+  createdByAdminEmail String
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+
+  members             EmailBucketMember[]
+
+  @@map("email_buckets")
+}
+
+model EmailBucketMember {
+  id        String      @id @default(uuid())
+  bucketId  String
+  email     String
+  createdAt DateTime    @default(now())
+
+  bucket    EmailBucket @relation(fields: [bucketId], references: [id], onDelete: Cascade)
+
+  @@unique([bucketId, email])
+  @@index([email])
+  @@map("email_bucket_members")
+}
