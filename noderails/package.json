@@ -1,0 +1,36 @@
+{
+  "name": "noderails-okx-platform",
+  "version": "0.1.0",
+  "private": true,
+  "description": "NodeRails platform snapshot for OKX X Layer submission (curated)",
+  "scripts": {
+    "build": "echo '[submission] intentionally disabled: build' && exit 1",
+    "dev": "echo '[submission] intentionally disabled: dev' && exit 1",
+    "dev:concurrently": "echo '[submission] intentionally disabled: dev:concurrently' && exit 1",
+    "dev:turbo": "echo '[submission] intentionally disabled: dev:turbo' && exit 1",
+    "lint": "echo '[submission] intentionally disabled' && exit 1",
+    "test": "echo '[submission] intentionally disabled' && exit 1",
+    "clean": "turbo run clean && rm -rf node_modules",
+    "queue:clear": "node scripts/clear-bullmq.mjs",
+    "db:generate": "echo '[submission] intentionally disabled' && exit 1",
+    "db:push": "echo '[submission] intentionally disabled: db:push' && exit 1",
+    "db:migrate": "echo '[submission] intentionally disabled: db:migrate' && exit 1",
+    "db:migrate:deploy": "echo '[submission] intentionally disabled' && exit 1",
+    "db:studio": "echo '[submission] intentionally disabled' && exit 1",
+    "db:reset": "echo '[submission] intentionally disabled' && exit 1",
+    "contracts:ops-ui": "pnpm --filter noderails-contracts-ops-ui start",
+    "submission:note": "echo 'OKX submission snapshot: review-only, not production-runnable' && exit 1"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "turbo": "^2.0.0",
+    "typescript": "^5.4.0"
+  },
+  "packageManager": "pnpm@9.0.0",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "ioredis": "^5.4.0"
+  }
+}
