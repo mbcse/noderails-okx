@@ -1,0 +1,27 @@
+# Multi-site reverse proxy. Edit domains and upstreams as needed.
+# DNS for each hostname must point at this server before HTTPS will work.
+#
+# Upstreams:
+#   leanrpc:5111              - Docker container on network `caddy_proxy`
+#   host.docker.internal:PORT - process on the host (BPC :8090, NodeRails :4000, etc.)
+
+api.leanrpc.xyz rpc.leanrpc.xyz {
+	reverse_proxy leanrpc:5111
+}
+
+twitterbk.mohitbhat.dev {
+	reverse_proxy host.docker.internal:3009
+}
+
+app.example.local {
+	reverse_proxy host.docker.internal:4000
+}
+
+app.example.local {
+	reverse_proxy host.docker.internal:8090
+}
+
+# HTTP only when no domain block matches (e.g. raw EC2 IP during setup)
+:80 {
+	respond "Caddy is running. Add site blocks to Caddyfile." 200
+}

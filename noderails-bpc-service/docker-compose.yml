@@ -1,0 +1,83 @@
+# docker-compose.yml
+# BPC API + Redis (Postgres: RDS in VPC)
+#
+# Shared Caddy uses:  reverse_proxy bpc-server:8090
+#   → bpc-caddy-proxy (socat on caddy_proxy) → host:8090 → bpc-server (host network)
+#
+# API must use host network so RDS/VPC routing works reliably.
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: bpc-redis
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6380:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - bpc_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  bpc-caddy-proxy:
+    image: alpine/socat
+    container_name: bpc-server
+    restart: unless-stopped
+    command: TCP-LISTEN:8090,fork,reuseaddr TCP:host.docker.internal:8090
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - caddy_proxy
+
+  bpc-migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: migrate
+    container_name: bpc-migrate
+    restart: "no"
+    network_mode: host
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      RUN_MIGRATIONS: "true"
+      RUN_SERVER: "false"
+
+  bpc-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: server
+    container_name: bpc-server-app
+    restart: unless-stopped
+    network_mode: host
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      PORT: 8090
+      RUN_MIGRATIONS: "false"
+      RUN_SERVER: "true"
+      REDIS_URL: redis://127.0.0.1:6380
+    depends_on:
+      bpc-migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
+          cpus: "1.0"
+        reservations:
+          memory: 256M
+          cpus: "0.25"
+
+networks:
+  caddy_proxy:
+    external: true
+
+volumes:
+  bpc_redis_data:

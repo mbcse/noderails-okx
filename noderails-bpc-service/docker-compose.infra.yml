@@ -1,0 +1,42 @@
+# docker-compose.infra.yml
+# Local PostgreSQL + Redis for BPC development
+# Ports 5433 / 6380 — avoids conflict with NodeRails (5432 / 6379)
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: bpc-postgres
+    restart: unless-stopped
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_USER: bpc
+      POSTGRES_PASSWORD: bpc
+      POSTGRES_DB: bpc
+    volumes:
+      - bpc_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bpc -d bpc"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    container_name: bpc-redis
+    restart: unless-stopped
+    ports:
+      - "6380:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - bpc_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  bpc_pg_data:
+  bpc_redis_data:

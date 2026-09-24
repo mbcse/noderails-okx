@@ -1,0 +1,32 @@
+# Standalone Caddy reverse proxy for multiple services on one host.
+# Copy this folder to your server, edit Caddyfile, then: docker compose up -d
+#
+# - host.docker.internal → apps on the host (NodeRails, BPC, etc.)
+# - service names like leanrpc:5111 → other Docker containers on network caddy_proxy
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - caddy_proxy
+
+networks:
+  caddy_proxy:
+    name: caddy_proxy
+    driver: bridge
+
+volumes:
+  caddy_data:
+  caddy_config:
