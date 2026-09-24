@@ -1,0 +1,124 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_DATABASE_URL")
+}
+
+enum ChainType {
+  EVM
+  SOLANA
+  SUI
+}
+
+enum PriceSourceType {
+  CEX
+  DEX
+  FX
+}
+
+enum HealthStatus {
+  HEALTHY
+  UNHEALTHY
+  UNKNOWN
+}
+
+model Chain {
+  id                     String   @id @default(uuid())
+  chainId                Int      @unique
+  chainType              ChainType
+  name                   String   @db.VarChar(100)
+  displayName            String   @db.VarChar(100)
+  nativeCurrencySymbol   String   @db.VarChar(10)
+  nativeCurrencyDecimals Int      @default(18)
+  explorerUrl            String?  @db.Text
+  coingeckoPlatformId    String?  @db.VarChar(50)
+  isTestnet              Boolean  @default(false)
+  isEnabled              Boolean  @default(true)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  rpcEndpoints RpcEndpoint[]
+  tokens       Token[]
+
+  @@map("chains")
+}
+
+model RpcEndpoint {
+  id                  String       @id @default(uuid())
+  chainId             Int
+  url                 String       @db.Text
+  priority            Int          @default(100)
+  weight              Int          @default(1)
+  isEnabled           Boolean      @default(true)
+  lastHealthAt        DateTime?
+  lastHealthStatus    HealthStatus @default(UNKNOWN)
+  consecutiveFailures Int          @default(0)
+  lastError           String?      @db.Text
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  chain Chain @relation(fields: [chainId], references: [chainId], onDelete: Cascade)
+
+  @@unique([chainId, url])
+  @@index([chainId, priority])
+  @@map("rpc_endpoints")
+}
+
+model Token {
+  id              String   @id @default(uuid())
+  chainId         Int
+  contractAddress String   @db.VarChar(128)
+  symbol          String   @db.VarChar(20)
+  name            String   @db.VarChar(100)
+  decimals        Int
+  isNative        Boolean  @default(false)
+  /// Unified lookup key: SYMBOL-CHAINID (e.g. USDC-137)
+  tokenKey        String?  @unique @db.VarChar(50)
+  coingeckoId     String?  @db.VarChar(100)
+  defillamaId     String?  @db.VarChar(100)
+  isEnabled       Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  chain Chain @relation(fields: [chainId], references: [chainId], onDelete: Cascade)
+
+  @@unique([chainId, contractAddress])
+  @@index([symbol])
+  @@index([tokenKey])
+  @@map("tokens")
+}
+
+model PriceSource {
+  id              String          @id @default(uuid())
+  slug            String          @unique @db.VarChar(50)
+  name            String          @db.VarChar(100)
+  type            PriceSourceType
+  priority        Int             @default(100)
+  isEnabled       Boolean         @default(true)
+  rateLimitPerMin Int             @default(30)
+  timeoutMs       Int             @default(10000)
+  apiKeyEnvVar    String?         @db.VarChar(100)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  mappings PriceSourceMapping[]
+
+  @@map("price_sources")
+}
+
+model PriceSourceMapping {
+  id            String @id @default(uuid())
+  priceSourceId String
+  assetKey      String @db.VarChar(50)
+  sourceAssetId String @db.VarChar(200)
+
+  priceSource PriceSource @relation(fields: [priceSourceId], references: [id], onDelete: Cascade)
+
+  @@unique([priceSourceId, assetKey])
+  @@index([assetKey])
+  @@map("price_source_mappings")
+}
