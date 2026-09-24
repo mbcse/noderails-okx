@@ -1,0 +1,37 @@
+{
+  "name": "noderails-bpc-service",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "echo '[submission] intentionally disabled: dev' && exit 1",
+    "dev:server": "echo '[submission] intentionally disabled: dev:server' && exit 1",
+    "dev:admin": "echo '[submission] intentionally disabled: dev:admin' && exit 1",
+    "db:generate": "echo '[submission] intentionally disabled' && exit 1",
+    "db:migrate": "echo '[submission] intentionally disabled: db:migrate' && exit 1",
+    "db:migrate:deploy": "echo '[submission] intentionally disabled' && exit 1",
+    "db:seed": "echo '[submission] intentionally disabled' && exit 1",
+    "prestart:local": "pnpm db:generate && pnpm db:migrate:deploy",
+    "start:local": "echo '[submission] intentionally disabled: start:local' && exit 1",
+    "start:local:seed": "echo '[submission] intentionally disabled: start:local:seed' && exit 1",
+    "build": "echo '[submission] intentionally disabled: build' && exit 1",
+    "test": "echo '[submission] intentionally disabled' && exit 1",
+    "test:api": "node scripts/test-api.mjs",
+    "test:api:local": "BPC_URL=http://localhost:8090 node scripts/test-api.mjs",
+    "test:balance": "node scripts/test-balance.mjs",
+    "test:balance:local": "BPC_URL=http://localhost:8090 node scripts/test-balance.mjs",
+    "docker:infra": "docker compose -f docker-compose.infra.yml up -d",
+    "docker:infra:down": "docker compose -f docker-compose.infra.yml down",
+    "docker:build": "docker compose build",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f bpc-server",
+    "submission:note": "echo 'OKX submission snapshot: review-only, not production-runnable' && exit 1"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "dotenv-cli": "^11.0.0"
+  },
+  "description": "BPC Balance and Price Check - OKX X Layer submission snapshot"
+}

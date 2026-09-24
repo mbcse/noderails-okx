@@ -1,0 +1,53 @@
+# Dependencies (re-installed in container)
+node_modules
+.pnpm-store
+
+# Build artifacts
+dist
+build
+.next
+*.tsbuildinfo
+.turbo
+
+# IDE / AI
+.vscode
+.idea
+.cursor
+*.swp
+*.swo
+
+# Git
+.git
+.gitignore
+.github
+
+# Docs / tests (not needed in image)
+docs
+coverage
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env files — pass at runtime via docker compose, never bake in
+.env
+.env.local
+.env.*.local
+admin/.env.local
+
+# Dev test scripts (not needed in image)
+scripts/test-api.mjs
+scripts/test-balance.mjs
+
+# Compose / Docker definitions (not needed inside image)
+docker-compose*.yml
+Dockerfile
+.dockerignore
+
+# Large seed cache (fetched at seed runtime if missing)
+server/prisma/seed-data/chainlist-rpcs.json
+
+# Misc
+*.md
+!README.md
