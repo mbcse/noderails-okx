@@ -1,0 +1,33 @@
+{
+  "name": "@noderails/setup-cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "One-time setup CLI for registering chains, contracts, signers, and webhooks with MTXM & Indexer",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "noderails-setup": "./dist/index.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "echo '[submission] intentionally disabled' && exit 1",
+    "dev": "echo '[submission] intentionally disabled' && exit 1",
+    "clean": "rm -rf dist",
+    "start": "echo '[submission] intentionally disabled' && exit 1"
+  },
+  "dependencies": {
+    "@noderails/common": "workspace:*",
+    "@noderails/mtxm-client": "workspace:*",
+    "@noderails/indexer-client": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.4.0"
+  }
+}
