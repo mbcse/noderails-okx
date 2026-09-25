@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NodeRails Open Payments Accelerator Proposal</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <style>
+    :root {
+      --ink: #18181b;
+      --muted: #52525b;
+      --accent: #4f46e5;
+      --border: #e4e4e7;
+      --bg: #ffffff;
+      --soft: #fafafa;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      font-size: 11pt;
+      line-height: 1.55;
+      color: var(--ink);
+      background: var(--bg);
+    }
+
+    .toolbar {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 0.75rem 1.25rem;
+      background: #18181b;
+      color: #fff;
+      font-size: 0.875rem;
+    }
+
+    .toolbar button {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 999px;
+      padding: 0.5rem 1rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .toolbar button:hover { background: #4338ca; }
+
+    .doc {
+      max-width: 820px;
+      margin: 0 auto;
+      padding: 2.5rem 2rem 4rem;
+    }
+
+    .cover {
+      text-align: center;
+      padding: 3rem 1rem 2.5rem;
+      margin-bottom: 2rem;
+      border-bottom: 2px solid var(--border);
+      page-break-after: always;
+    }
+
+    .cover .badge {
+      display: inline-block;
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 1rem;
+    }
+
+    .cover h1 {
+      font-size: 2rem;
+      line-height: 1.15;
+      margin: 0 0 0.5rem;
+      border: none;
+      padding: 0;
+    }
+
+    .cover .subtitle {
+      font-size: 1.125rem;
+      color: var(--muted);
+      margin-bottom: 1.5rem;
+    }
+
+    .cover .meta {
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+
+    .cover .meta a { color: var(--accent); }
+
+    h1 {
+      font-size: 1.65rem;
+      margin: 2rem 0 1rem;
+      padding-bottom: 0.35rem;
+      border-bottom: 2px solid var(--accent);
+      page-break-after: avoid;
+    }
+
+    h2 {
+      font-size: 1.25rem;
+      margin: 1.75rem 0 0.75rem;
+      color: #27272a;
+      page-break-after: avoid;
+    }
+
+    h3 {
+      font-size: 1.05rem;
+      margin: 1.25rem 0 0.5rem;
+      page-break-after: avoid;
+    }
+
+    p { margin: 0.65rem 0; }
+
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    ul, ol { margin: 0.5rem 0 0.75rem; padding-left: 1.35rem; }
+    li { margin: 0.25rem 0; }
+
+    hr {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 2rem 0;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1rem 0 1.25rem;
+      font-size: 0.92rem;
+      page-break-inside: avoid;
+    }
+
+    th, td {
+      border: 1px solid var(--border);
+      padding: 0.5rem 0.65rem;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: var(--soft);
+      font-weight: 600;
+    }
+
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.88em;
+      background: #f4f4f5;
+      padding: 0.1em 0.35em;
+      border-radius: 4px;
+    }
+
+    pre {
+      background: #18181b;
+      color: #f4f4f5;
+      padding: 1rem;
+      border-radius: 8px;
+      overflow-x: auto;
+      font-size: 0.85rem;
+      page-break-inside: avoid;
+    }
+
+    pre code { background: none; padding: 0; color: inherit; }
+
+    .mermaid {
+      margin: 1.25rem 0;
+      padding: 1rem;
+      background: var(--soft);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      page-break-inside: avoid;
+    }
+
+    @media print {
+      .toolbar { display: none !important; }
+      .doc { max-width: none; padding: 0; }
+      body { font-size: 10pt; }
+      a { color: var(--ink); }
+      h2 { page-break-before: auto; }
+    }
+
+    @page {
+      margin: 18mm 16mm;
+    }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <span>NodeRails Open Payments Accelerator Proposal</span>
+    <button type="button" onclick="window.print()">Save as PDF (Print)</button>
+  </div>
+
+  <div class="doc">
+    <div class="cover">
+      <div class="badge">Interledger Open Payments Accelerator</div>
+      <h1>NodeRails Universal Settlement</h1>
+      <p class="subtitle">Hybrid crypto commerce and Open Payments for merchants worldwide</p>
+      <p class="meta">
+        <strong>NodeRails</strong> · <a href="https://www.example.local">example.local</a><br />
+        <strong>WallCard</strong> · <a href="https://example.local">wallcard.example.local</a><br />
+        hello@example.com
+      </p>
+    </div>
+
+    <h1>NodeRails Open Payments Accelerator Proposal</h1>
+<p><strong>Universal Settlement for Crypto Commerce</strong></p>
+<p>Submitted to the Interledger Open Payments Accelerator  </p>
+<p><strong>Website:</strong> <a href="https://www.example.local">example.local</a> · <strong>WallCard:</strong> <a href="https://example.local">wallcard.example.local</a>  </p>
+<p><strong>Contact:</strong> hello@example.com · <a href="https://www.linkedin.com/company/noderails">LinkedIn</a> · <a href="https://x.com/noderails">X @noderails</a></p>
+<hr />
+<h2>Executive summary</h2>
+<p>NodeRails is a <strong>non-custodial payment platform</strong> for businesses that want to accept programmable money without giving up control of their funds. Today we run production-grade <strong>hosted checkout</strong>, <strong>payment links</strong>, <strong>invoices</strong>, <strong>subscriptions</strong>, <strong>disputes</strong>, and <strong>webhooks</strong> across <strong>EVM, Solana, and Sui</strong>, with funds held in audited on-chain escrow until settlement.</p>
+<p>Our next step is <strong>Universal Settlement</strong>: the same merchant API and checkout experience, extended with <strong>Open Payments</strong> and <strong>Interledger</strong>, so payers who do not hold crypto can still pay a merchant using <strong>wallet addresses</strong>, <strong>bank-linked accounts</strong>, or <strong>stablecoin balances</strong> at regulated partners (ASEs). Value routes over ILP. Merchants still get one dashboard, one webhook model, and one reconciliation story.</p>
+<p><strong>WallCard</strong> (<a href="https://example.local">wallcard.example.local</a>) is our <strong>card-first payer wallet</strong> for the crypto rail: shoppers pay with familiar card steps (PAN, CVV, PIN, OTP) while the app signs like a normal Web3 wallet on Solana and EVM. It removes the &quot;install MetaMask for every purchase&quot; barrier without NodeRails taking custody of keys.</p>
+<p>We are <strong>not</strong> applying to become a bank or ASE. We are applying to build the <strong>reference merchant orchestration layer</strong> on Open Payments: checkout, virtual accounts, bank settlement, and payouts, integrated with our existing crypto stack and WallCard.</p>
+<p><strong>What we want from the accelerator:</strong> technical mentorship on Open Payments and Rafiki, introductions to ASE partners, support for a public testnet pilot, and co-marketing as an example of <strong>hybrid crypto + Open Payments commerce</strong>.</p>
+<hr />
+<h2>1. What is NodeRails?</h2>
+<p>NodeRails is payment infrastructure for merchants and developers who sell online with crypto today and need <strong>account-based rails</strong> tomorrow.</p>
+<h3>Core product today</h3>
+<table><thead><tr><th>Capability</th><th>Description</th></tr></thead><tbody><tr><td><strong>Hosted checkout</strong></td><td>Branded payment pages at <code>pay.example.local</code> with chain and token selection</td></tr><tr><td><strong>Payment links</strong></td><td>Shareable links for one-off or reusable payments</td></tr><tr><td><strong>Invoices</strong></td><td>Line items, sequential numbering, customer accounts, payment status</td></tr><tr><td><strong>Subscriptions</strong></td><td>Recurring billing with product plans and trial periods</td></tr><tr><td><strong>Escrow capture</strong></td><td>Smart contract escrow on EVM, Solana, and Sui</td></tr><tr><td><strong>Timelock settlement</strong></td><td>Funds release to merchant wallet after dispute window</td></tr><tr><td><strong>Disputes and refunds</strong></td><td>On-chain dispute flow with buyer protection</td></tr><tr><td><strong>Webhooks</strong></td><td>Signed events for <code>payment.captured</code>, <code>payment.settled</code>, and related lifecycle</td></tr><tr><td><strong>Merchant dashboard</strong></td><td>Apps, API keys, stats, wallet connect, chain enablement</td></tr><tr><td><strong>SDK and REST API</strong></td><td>Integrate checkout and payments into any stack</td></tr></tbody></table>
+<h3>Design principles</h3>
+<ol>
+<li><strong>Non-custodial on crypto.</strong> NodeRails orchestrates transactions. Escrow rules live on-chain. Merchants and payers keep wallet control.</li>
+<li><strong>Multi-chain by default.</strong> One integration covers EVM L1/L2, Solana, and Sui rather than one chain per integration.</li>
+<li><strong>Merchant-first operations.</strong> Links, invoices, subscriptions, and reporting match what teams expect from Stripe-style tooling.</li>
+<li><strong>Compliance-aware.</strong> Published AML/CFT policy, screening hooks, and audit-friendly payment traces.</li>
+</ol>
+<h3>Positioning</h3>
+<p>NodeRails sits between <strong>raw blockchain tooling</strong> and <strong>traditional PSPs</strong>:</p>
+<ul>
+<li>Unlike a custodial exchange checkout, funds are not held in a NodeRails omnibus account on the crypto rail.</li>
+<li>Unlike wiring directly to smart contracts, merchants get hosted UX, webhooks, disputes, and multi-chain routing without building it themselves.</li>
+</ul>
+<hr />
+<h2>2. What is WallCard?</h2>
+<p><strong>WallCard</strong> is the shopper-facing wallet in the <strong>NodeRails Network</strong>: a card-first experience that behaves like a standard Web3 wallet for developers.</p>
+<h3>The problem WallCard solves</h3>
+<p>Crypto checkout still asks mainstream buyers to install browser extensions, manage seed phrases, and hold the right token on the right chain. That friction kills conversion for e-commerce, SaaS, and marketplaces.</p>
+<h3>How WallCard works</h3>
+<ol>
+<li>Shopper sees a <strong>card-style flow</strong> at checkout (PAN, CVV, PIN, OTP).</li>
+<li>Behind the scenes, WallCard runs a <strong>secure signer</strong>. Keys do not leave the secure environment.</li>
+<li>The merchant app still calls the same <strong><code>provider.request</code></strong> surface used by MetaMask-style wallets: message signing, typed data (EIP-712), and sends on <strong>Solana and EVM</strong>.</li>
+<li>NodeRails escrow capture and settlement proceed exactly as they do for external wallets.</li>
+</ol>
+<h3>WallCard vs Open Payments (important distinction)</h3>
+<table><thead><tr><th></th><th><strong>WallCard</strong></th><th><strong>Open Payments</strong></th></tr></thead><tbody><tr><td><strong>Payer experience</strong></td><td>Card in, crypto signature out</td><td>Bank, fintech, or OP wallet</td></tr><tr><td><strong>Rail</strong></td><td>On-chain escrow (crypto)</td><td>ASE account + ILP</td></tr><tr><td><strong>NodeRails role</strong></td><td>Payer UX partner</td><td>Orchestrator to partner ASE</td></tr><tr><td><strong>Custody</strong></td><td>Secure signer, not NodeRails server</td><td>Regulated ASE holds balances</td></tr></tbody></table>
+<p>WallCard and Open Payments are <strong>complementary payer paths</strong> on the same checkout page. They are not substitutes.</p>
+<h3>Live today</h3>
+<p>WallCard is public at <strong><a href="https://example.local">wallcard.example.local</a></strong> with product details, SDK playground, and demo flows.</p>
+<hr />
+<h2>3. Current traction and what we have shipped</h2>
+<p>We are an <strong>early-stage, product-heavy</strong> company. We lead with what is built and live rather than inflated metrics.</p>
+<h3>Platform status</h3>
+<table><thead><tr><th>Area</th><th>Status</th></tr></thead><tbody><tr><td><strong>Production monorepo</strong></td><td><code>noderails-server</code>, <code>payment-ui</code>, merchant dashboard, admin, landing, SDK</td></tr><tr><td><strong>Chains live</strong></td><td>EVM (multiple networks), Solana, Sui</td></tr><tr><td><strong>On-chain programs</strong></td><td>Escrow and merchant manager on EVM; Anchor programs on Solana; Move on Sui</td></tr><tr><td><strong>Transaction ops</strong></td><td>MTXM (multichain tx manager) + indexer for send, confirm, and webhook ingestion</td></tr><tr><td><strong>WallCard</strong></td><td>Live demo and SDK at wallcard.example.local</td></tr><tr><td><strong>Developer docs</strong></td><td>Public docs at example.local/docs</td></tr><tr><td><strong>Compliance</strong></td><td>AML/CFT policy published at example.local/compliance</td></tr><tr><td><strong>Open Payments</strong></td><td>Architecture documented; integration not yet in production</td></tr></tbody></table>
+<h3>Backing and ecosystem</h3>
+<ul>
+<li><strong>Investors:</strong> <a href="https://www.w3x.network/">W3X Fund</a>, <a href="https://www.lvlup.vc/">LvlUp Ventures</a></li>
+<li><strong>Community:</strong> Active <a href="https://discord.gg/8uwSfv9Tvk">Discord</a>, <a href="https://t.me/+fzUTcAYr-zhhZjg1">Telegram</a>, and developer outreach</li>
+<li><strong>Reference integrations:</strong> Buy-me-coffee demo, merchant dashboard, multi-app API key model</li>
+</ul>
+<h3>Commercial model (today)</h3>
+<ul>
+<li><strong>1% introductory transaction fee</strong> on crypto commerce</li>
+<li>Merchant self-serve onboarding via dashboard</li>
+<li>Pricing designed to undercut legacy crypto gateways while staying sustainable at scale</li>
+</ul>
+<h3>What traction means for us right now</h3>
+<p>We have <strong>finished the hard infrastructure work</strong> (multi-chain escrow, checkout, ops tooling) that typically takes teams 12 to 18 months. We are now entering <strong>merchant acquisition and rail expansion</strong>. Open Payments is the strategic expansion that lets us serve merchants whose buyers pay in <strong>fiat accounts and OP wallets</strong>, not only on-chain assets.</p>
+<p>We will share <strong>pilot merchant names and volume</strong> with the accelerator team under NDA as design partners onboard through the program.</p>
+<hr />
+<h2>4. The problem</h2>
+<p>Merchants using NodeRails today face three gaps that crypto escrow alone cannot close:</p>
+<h3>Gap 1: Payer asset mismatch</h3>
+<p>A buyer with a EUR bank wallet or USDC at a fintech app should not need to buy SOL on Sui before paying a $20 invoice. Crypto-native checkout optimizes for people who already hold chain assets.</p>
+<h3>Gap 2: Settlement destination sprawl</h3>
+<p>Merchants want:</p>
+<ul>
+<li>Crypto in treasury wallets</li>
+<li>Stablecoin for treasury policy</li>
+<li><strong>Bank accounts</strong> in USD, EUR, GBP, and local rails</li>
+<li><strong>Virtual accounts</strong> for marketplace sellers and B2B reconciliation</li>
+</ul>
+<p>Each destination today implies a <strong>custom partner API</strong>. That does not scale for a platform product.</p>
+<h3>Gap 3: Identifier and privacy models</h3>
+<p>B2B invoices, private payment links, and virtual accounts need <strong>human-readable, account-style identifiers</strong> (payment pointers, wallet address paths), not only hex and base58 strings.</p>
+<p><strong>Interledger and Open Payments address all three</strong> with one standard object model and a ledger-agnostic routing layer.</p>
+<hr />
+<h2>5. Vision: Universal Settlement</h2>
+<p>Our vision is that a merchant integrates <strong>NodeRails once</strong> and accepts payers from <strong>any supported rail</strong>:</p>
+<div class="mermaid">flowchart TB
+  subgraph payers [Payer chooses at checkout]
+    WC[WallCard card to crypto sign]
+    CW[External crypto wallet]
+    OP[Open Payments wallet or bank app]
+  end
+
+  subgraph noderails [NodeRails platform]
+    Checkout[Hosted checkout and payment links]
+    Server[Orchestration API and webhooks]
+    Policy[Treasury and settlement policy]
+  end
+
+  subgraph settle [Where value lands]
+    OnChain[Merchant on-chain wallet]
+    Stable[Stablecoin via partner]
+    Bank[Bank account via ASE payout]
+    VA[Virtual account balance]
+  end
+
+  WC --> Checkout
+  CW --> Checkout
+  OP --> Checkout
+  Checkout --> Server
+  Server --> Policy
+  Policy --> OnChain
+  Policy --> Stable
+  Policy --> Bank
+  Policy --> VA</div>
+<h3>Product name internally: <strong>NodeRails Universal Settlement</strong></h3>
+<table><thead><tr><th>Merchant need</th><th>Rail</th></tr></thead><tbody><tr><td>Accept crypto with buyer protection</td><td>Existing escrow (EVM / Solana / Sui)</td></tr><tr><td>Accept without forcing wallet extensions</td><td>WallCard on crypto rail</td></tr><tr><td>Accept bank and OP wallet payers</td><td>Open Payments incoming payments</td></tr><tr><td>Reconcile sub-merchants and B2B</td><td>Virtual account wallet address paths</td></tr><tr><td>Pay suppliers and affiliates</td><td>Open Payments outgoing payments + crypto batch payouts</td></tr><tr><td>Settle to bank after crypto sale</td><td>Treasury policy + OP payout to bank ASE</td></tr></tbody></table>
+<p><strong>One webhook vocabulary.</strong> <code>payment.captured</code>, <code>payment.settled</code>, and future <code>payout.completed</code> mean the same thing regardless of rail.</p>
+<hr />
+<h2>6. How NodeRails works today (crypto rail)</h2>
+<div class="mermaid">sequenceDiagram
+  participant Merchant
+  participant NR as NodeRails
+  participant UI as payment-ui checkout
+  participant Chain as Escrow on-chain
+  participant WH as Merchant webhook
+
+  Merchant->>NR: Create payment link or checkout session
+  NR-->>Merchant: Checkout URL
+  Merchant->>UI: Customer opens link
+  UI->>NR: Authorize from wallet or WallCard
+  NR->>Chain: Capture to escrow
+  Chain-->>NR: Confirmed via indexer
+  NR->>WH: payment.captured
+  Note over Chain: Timelock dispute window
+  Chain-->>NR: Settle to merchant wallet
+  NR->>WH: payment.settled</div>
+<h3>Technical stack (abbreviated)</h3>
+<ul>
+<li><strong><code>noderails-server</code>:</strong> Auth, apps, payment intents, capture, settle workers, webhooks (BullMQ)</li>
+<li><strong><code>payment-ui</code>:</strong> Hosted checkout and payment link UX</li>
+<li><strong>MTXM + Indexer:</strong> Multichain transaction submission and confirmation</li>
+<li><strong>Smart contracts / programs:</strong> Escrow with timelock, disputes, refunds</li>
+</ul>
+<p>This rail <strong>stays unchanged</strong>. Open Payments is a <strong>parallel adapter</strong>, not a replacement.</p>
+<hr />
+<h2>7. How Interledger and Open Payments work with NodeRails</h2>
+<h3>Shared primitives (all use cases)</h3>
+<table><thead><tr><th>Primitive</th><th>Role</th></tr></thead><tbody><tr><td><strong>Wallet address</strong></td><td>HTTPS URL identifying an OP-enabled account (e.g. <code>https://pay.example.local/merchants/acme</code>)</td></tr><tr><td><strong>Payment pointer</strong></td><td>User-facing alias (e.g. <code>$pay.example.local/merchants/acme</code>)</td></tr><tr><td><strong>Incoming payment</strong></td><td>Money expected in; tied to order, link, or invoice via metadata</td></tr><tr><td><strong>Quote</strong></td><td>ASE commitment on amounts, FX, and fees before send</td></tr><tr><td><strong>Outgoing payment</strong></td><td>Money sent out; used for payer checkout and merchant payouts</td></tr><tr><td><strong>GNAP grants</strong></td><td>Fine-grained, time-bounded consent for apps and agents</td></tr><tr><td><strong>ILP / STREAM</strong></td><td>Network layer routing value between ASEs</td></tr></tbody></table>
+<p>An <strong>ASE (Account Servicing Entity)</strong> is a bank, wallet provider, or licensed fintech that holds balances and implements Open Payments. <strong>NodeRails does not become the ASE in production.</strong> We integrate with partner ASEs (and Rafiki in development).</p>
+<h3>Integration pattern: non-custodial orchestrator</h3>
+<div class="mermaid">flowchart TB
+  subgraph noderails [NodeRails non-custodial]
+    API[Merchant REST API]
+    OPClient[Open Payments client module]
+    Reconcile[Reconciliation worker]
+    WHOut[Webhooks]
+  end
+
+  subgraph partners [Partner ASEs]
+    ASE1[Bank or fintech ASE]
+    ASE2[Stablecoin ASE]
+    Rafiki[Rafiki testnet]
+  end
+
+  subgraph ilp [Interledger]
+    Connectors[ILP connector network]
+  end
+
+  API --> OPClient
+  OPClient --> ASE1
+  OPClient --> ASE2
+  OPClient --> Rafiki
+  ASE1 --> Connectors
+  ASE2 --> Connectors
+  Connectors --> ASE1
+  Reconcile --> OPClient
+  Reconcile --> WHOut</div>
+<p>NodeRails:</p>
+<ol>
+<li>Creates <strong>incoming payments</strong> when merchants create checkout sessions or links</li>
+<li>Exposes checkout URLs and payment pointers to payers</li>
+<li>Polls or receives events when incoming payments are funded</li>
+<li>Creates <strong>quotes and outgoing payments</strong> for payouts and bank settlement</li>
+<li>Maps OP state to existing <strong>PaymentIntent</strong> lifecycle and webhooks</li>
+</ol>
+<h3>Hybrid checkout flow (planned)</h3>
+<div class="mermaid">sequenceDiagram
+  participant Merchant
+  participant NR as NodeRails
+  participant ASE as Partner ASE
+  participant ILP as ILP network
+  participant Payer as OP-enabled payer
+
+  Merchant->>NR: Create payment link
+  NR->>ASE: POST incoming-payment on merchant wallet address
+  ASE-->>NR: incoming payment URL
+  NR-->>Merchant: Checkout URL plus OP option
+
+  Payer->>NR: Open checkout choose Pay with wallet
+  Payer->>ASE: Create quote receiver equals incoming payment
+  Payer->>ASE: Create outgoing payment from quote
+  ASE->>ILP: STREAM and ILPv4 packets
+  ILP-->>ASE: Fulfill
+  ASE-->>NR: receivedAmount updated
+  NR->>Merchant: Webhook payment.captured and payment.settled</div>
+<hr />
+<h2>8. Use cases we will ship (focused scope)</h2>
+<p>We are <strong>not</strong> pursuing every Open Payments use case. We focus on <strong>merchant commerce</strong> plus <strong>WallCard</strong> on crypto.</p>
+<h3>In scope</h3>
+<table><thead><tr><th>#</th><th>Use case</th><th>NodeRails + Open Payments</th><th>WallCard role</th></tr></thead><tbody><tr><td>1</td><td><strong>Stripe-like merchant checkout</strong></td><td>Incoming payment per order; hosted checkout; webhooks</td><td>Crypto tab at same checkout</td></tr><tr><td>2</td><td><strong>Payment links and invoices</strong></td><td>One incoming payment per link or invoice; metadata reconciliation</td><td>Optional payer on crypto links</td></tr><tr><td>3</td><td><strong>Virtual accounts</strong></td><td>Sub-path wallet address per VA; attribute deposits by metadata</td><td>N/A</td></tr><tr><td>4</td><td><strong>Bank settlement and payouts</strong></td><td>Quote + outgoing payment to bank ASE beneficiary</td><td>N/A</td></tr><tr><td>5</td><td><strong>Crypto to stablecoin policy</strong></td><td>On-chain capture then OP outgoing per treasury rules</td><td>Capture leg unchanged</td></tr><tr><td>6</td><td><strong>Private payments</strong></td><td>Short-expiry incoming payments; invite-only URLs</td><td>Private crypto links unchanged</td></tr><tr><td>7</td><td><strong>Subscriptions (phase 2)</strong></td><td>GNAP grants with spend limits; renewal outgoing payments</td><td>Recurring crypto via WallCard</td></tr><tr><td>8</td><td><strong>Agent budgets (future)</strong></td><td>GNAP scoped grants for automated spend</td><td>Agent card signing via WallCard</td></tr></tbody></table>
+<h3>Out of scope (for this program)</h3>
+<table><thead><tr><th>Use case</th><th>Why defer</th></tr></thead><tbody><tr><td>NodeRails as primary ASE / Rafiki operator</td><td>Requires licensing; we stay orchestrator</td></tr><tr><td>Full consumer P2P wallet app</td><td>WallCard is checkout-focused, not Revolut clone</td></tr><tr><td>Web Monetization streaming micropayments</td><td>Different product surface; optional later</td></tr><tr><td>Replacing crypto escrow</td><td>Dual rail, not migration</td></tr></tbody></table>
+<hr />
+<h2>9. Target customers</h2>
+<h3>Primary segments</h3>
+<p><strong>1. Crypto-native merchants scaling to mainstream buyers</strong></p>
+<ul>
+<li>NFT marketplaces, gaming, creator tools, SaaS with crypto pricing</li>
+<li><strong>Pain:</strong> Buyers without wallets abandon checkout</li>
+<li><strong>Solution:</strong> WallCard for crypto path; Open Payments for account-based payers</li>
+</ul>
+<p><strong>2. Marketplaces and platforms</strong></p>
+<ul>
+<li>Need <strong>virtual accounts</strong> per seller and unified payouts</li>
+<li><strong>Pain:</strong> Reconciliation across many beneficiaries and rails</li>
+<li><strong>Solution:</strong> Wallet address paths + incoming payment metadata + outgoing payout API</li>
+</ul>
+<p><strong>3. Cross-border B2B and services</strong></p>
+<ul>
+<li>Invoices in USD/EUR; buyers in multiple countries</li>
+<li><strong>Pain:</strong> FX and local rail fragmentation</li>
+<li><strong>Solution:</strong> OP quotes across ASEs via ILP; single NodeRails invoice object</li>
+</ul>
+<p><strong>4. AI and agent commerce (emerging)</strong></p>
+<ul>
+<li>Agents need <strong>delegated spend</strong> with hard limits</li>
+<li><strong>Pain:</strong> No standard for agent-to-merchant pay across ledgers</li>
+<li><strong>Solution:</strong> GNAP grants + WallCard or OP outgoing payments within budget</li>
+</ul>
+<p><strong>5. Developers building on NodeRails SDK</strong></p>
+<ul>
+<li>Want one integration for crypto + account rails</li>
+<li><strong>Pain:</strong> Separate PSP, crypto gateway, and payout APIs</li>
+<li><strong>Solution:</strong> Universal Settlement API with <code>railType: CRYPTO | OPEN_PAYMENTS</code></li>
+</ul>
+<h3>Geography and rails (roadmap)</h3>
+<p>Initial OP pilot: <strong>USD and EUR</strong> corridors with partner ASEs. Virtual account roadmap aligns with <strong>USD, EUR, GBP, MXN, BRL, COP</strong> onramp specs already on our product roadmap.</p>
+<hr />
+<h2>10. Why NodeRails and Interledger are a strong match</h2>
+<ol>
+<li><strong>We already have merchant-grade checkout.</strong> Most OP examples are wallet or ASE demos. We bring <strong>production checkout, links, invoices, subscriptions, and webhooks</strong>.</li>
+</ol>
+<ol>
+<li><strong>We prove hybrid rails.</strong> Interledger wins when crypto and account ledgers coexist. NodeRails + WallCard + Open Payments is a <strong>live story</strong>, not a greenfield slide.</li>
+</ol>
+<ol>
+<li><strong>We stay non-custodial where it matters.</strong> Our brand is trust-minimized crypto commerce. Open Payments fits as <strong>orchestration to ASEs</strong>, matching Interledger's open network model.</li>
+</ol>
+<ol>
+<li><strong>We reduce integration surface for merchants.</strong> One NodeRails API replaces many proprietary bank and wallet APIs behind one OP adapter.</li>
+</ol>
+<ol>
+<li><strong>GNAP-ready product roadmap.</strong> Subscriptions, agents, and private payments need delegated auth. We will implement grants as first-class dashboard features.</li>
+</ol>
+<hr />
+<h2>11. What we ask from the accelerator</h2>
+<table><thead><tr><th>Ask</th><th>Outcome</th></tr></thead><tbody><tr><td><strong>Technical mentorship</strong></td><td>Rafiki playground to production patterns; OP SDK best practices; GNAP scope design</td></tr><tr><td><strong>ASE partner introductions</strong></td><td>At least one pilot ASE for USD/EUR receive and payout</td></tr><tr><td><strong>Testnet co-pilot</strong></td><td>3 to 5 design merchants on Interledger testnet with public case study</td></tr><tr><td><strong>Spec feedback</strong></td><td>Real-world metadata and reconciliation requirements from our checkout model</td></tr><tr><td><strong>Ecosystem visibility</strong></td><td>Listed as reference <strong>merchant orchestration</strong> integration</td></tr></tbody></table>
+<hr />
+<h2>12. Ninety-day plan (with accelerator)</h2>
+<table><thead><tr><th>Week</th><th>Milestone</th></tr></thead><tbody><tr><td><strong>1 to 2</strong></td><td>Rafiki local playground; <code>@interledger/open-payments</code> POC in <code>noderails-server</code> (feature flag)</td></tr><tr><td><strong>3 to 4</strong></td><td>Create incoming payment on checkout session create; internal webhook mapping</td></tr><tr><td><strong>5 to 6</strong></td><td><code>payment-ui</code> hybrid tab: &quot;Pay with Open Payments wallet&quot; + QR on testnet</td></tr><tr><td><strong>7 to 8</strong></td><td>Design partner onboarding (3 merchants); reconciliation report v1</td></tr><tr><td><strong>9 to 10</strong></td><td>Outgoing payment payout POC; virtual account path provisioning design</td></tr><tr><td><strong>11 to 12</strong></td><td>Public demo video; accelerator demo day; partner ASE sandbox kickoff</td></tr></tbody></table>
+<p><strong>Success metrics at day 90:</strong></p>
+<ul>
+<li>End-to-end testnet checkout: incoming payment funded → NodeRails webhook delivered</li>
+<li>At least <strong>one</strong> design partner live on testnet</li>
+<li>Documented <strong>Open Payments adapter</strong> interface swappable between Rafiki and partner ASE</li>
+<li>WallCard + OP <strong>dual-rail checkout</strong> demo on staging</li>
+</ul>
+<hr />
+<h2>13. Team and links</h2>
+<table><thead><tr><th>Resource</th><th>URL</th></tr></thead><tbody><tr><td><strong>NodeRails</strong></td><td><a href="https://www.example.local">example.local</a></td></tr><tr><td><strong>WallCard</strong></td><td><a href="https://example.local">wallcard.example.local</a></td></tr><tr><td><strong>Developer docs</strong></td><td><a href="https://www.example.local/docs">example.local/docs</a></td></tr><tr><td><strong>Interledger architecture docs (internal)</strong></td><td><code>docs/interledger/</code> in our monorepo</td></tr><tr><td><strong>LinkedIn</strong></td><td><a href="https://www.linkedin.com/company/noderails">linkedin.com/company/noderails</a></td></tr><tr><td><strong>X</strong></td><td><a href="https://x.com/noderails">@noderails</a></td></tr></tbody></table>
+<hr />
+<h2>Appendix A: Three-rail checkout (summary diagram)</h2>
+<div class="mermaid">flowchart LR
+  subgraph checkout [Single NodeRails checkout session]
+    Tab1[WallCard or crypto wallet]
+    Tab2[Open Payments wallet]
+    Tab3[Legacy card PSP optional]
+  end
+
+  Tab1 --> Escrow[On-chain escrow]
+  Tab2 --> OP[Incoming payment plus ILP]
+  Tab3 --> PSP[Card processor]
+
+  Escrow --> WH[Unified merchant webhooks]
+  OP --> WH
+  PSP --> WH</div>
+<hr />
+<h2>Appendix B: Mapping NodeRails objects to Open Payments</h2>
+<table><thead><tr><th>NodeRails object</th><th>Open Payments resource</th></tr></thead><tbody><tr><td><code>CheckoutSession</code></td><td>Incoming payment (one-time)</td></tr><tr><td><code>PaymentIntent</code></td><td>Unified record; `railType: CRYPTO \</td><td>OPEN_PAYMENTS`</td></tr><tr><td><code>PaymentLink</code> slug</td><td>Wallet path or incoming payment metadata</td></tr><tr><td><code>VirtualAccount</code></td><td>Wallet address sub-path + <code>metadata.externalRef</code></td></tr><tr><td><code>Payout</code></td><td>Outgoing payment from merchant wallet address</td></tr><tr><td><code>Subscription</code> renewal</td><td>GNAP-limited outgoing payment series</td></tr></tbody></table>
+<hr />
+<h2>Appendix C: Compliance note</h2>
+<p>NodeRails publishes an AML/CFT policy and runs screening and fraud tooling on platform flows. Fiat and stablecoin account balances on the Open Payments rail are held by <strong>regulated ASE partners</strong>. NodeRails passes merchant and order metadata for partner KYC/KYB and sanctions workflows. Legal structure for production OP launch will be finalized with counsel and ASE agreements before mainnet funds.</p>
+<hr />
+<p>*This proposal reflects architecture and product direction as of June 2026. Open Payments integration is planned; crypto and WallCard rails are live or in active deployment.*</p>
+  </div>
+
+  <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: 'neutral',
+      securityLevel: 'loose',
+      flowchart: { useMaxWidth: true, htmlLabels: true },
+      sequence: { useMaxWidth: true }
+    });
+  </script>
+</body>
+</html>
